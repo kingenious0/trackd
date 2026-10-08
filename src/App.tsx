@@ -47,16 +47,15 @@ VITE_FIREBASE_APP_ID=<1:sender:web:app id>`}
 export default function App() {
   const isNative = Capacitor.isNativePlatform();
 
-  // If running compiled as native APK on the phone, strictly show Sentinel Shield View
-  if (isNative) {
-    return (
-      <div className="min-h-screen w-full bg-[#0B0F19] text-slate-100 font-sans antialiased selection:bg-emerald-500/20 selection:text-emerald-400">
-        <MobileClientView />
-      </div>
-    );
-  }
+  // Check URL query parameters: e.g. http://localhost:5173/?view=apk
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialView = searchParams.get("view");
+  const [viewOverride, setViewOverride] = useState<string | null>(initialView);
 
-  // --- WEB RADAR CONTROLLER ROUTING ---
+  const forceApkView = viewOverride === "apk";
+  const forceWebView = viewOverride === "web";
+  const showApk = forceApkView || (isNative && !forceWebView);
+
   const [user, setUser] = useState<User | null>(null);
   const [booting, setBooting] = useState(true);
   const [slowBoot, setSlowBoot] = useState(false);
@@ -97,28 +96,47 @@ export default function App() {
     );
   }, []);
 
-  if (!isConfigured) {
-    if (demo) {
-      return (
-        <WebDashboard
-          demo
-          user={null}
-          onExitDemo={() => setDemo(false)}
-        />
-      );
-    }
+  const switchView = (target: "web" | "apk") => {
+    setViewOverride(target);
+    const url = new URL(window.location.href);
+    url.searchParams.set("view", target);
+    window.history.pushState({}, "", url.toString());
+  };
+
+  // If in APK Sentinel mode, render MobileClientView with dev switch pill
+  if (showApk) {
     return (
-      <SetupNotice
-        onDemo={() => {
-          setDemoMode(true);
-          setDemo(true);
-        }}
-      />
+      <main className="min-h-screen w-full bg-[#0B0F19] text-slate-100 font-sans antialiased relative">
+        {!isNative && (
+          <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md shadow-2xl">
+            <button
+              onClick={() => switchView("web")}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition ${
+                !showApk ? "bg-blue-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Web Controller
+            </button>
+            <button
+              onClick={() => switchView("apk")}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition ${
+                showApk ? "bg-emerald-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              APK Sentinel
+            </button>
+          </div>
+        )}
+        <MobileClientView user={user} />
+      </main>
     );
   }
 
+  // --- WEB RADAR CONTROLLER ROUTING ---
+  let content = null;
+
   if (booting) {
-    return (
+    content = (
       <div className="flex h-screen w-full items-center justify-center bg-[#0B0F19]">
         <div className="flex flex-col items-center gap-3">
           <ShieldCheck className="h-10 w-10 animate-pulse text-emerald-400" />
@@ -126,24 +144,67 @@ export default function App() {
         </div>
       </div>
     );
-  }
-
-  if (demo) {
-    return (
+  } else if (!isConfigured) {
+    if (demo) {
+      content = (
+        <WebDashboard
+          demo
+          user={null}
+          onExitDemo={() => setDemo(false)}
+        />
+      );
+    } else {
+      content = (
+        <SetupNotice
+          onDemo={() => {
+            setDemoMode(true);
+            setDemo(true);
+          }}
+        />
+      );
+    }
+  } else if (demo) {
+    content = (
       <WebDashboard
         demo
         user={null}
         onExitDemo={() => setDemo(false)}
       />
     );
+  } else if (user) {
+    content = (
+      <WebDashboard
+        user={user}
+        onSignOut={() => signOut(auth())}
+      />
+    );
+  } else {
+    content = <AuthPage backendSlow={slowBoot} />;
   }
 
-  return user ? (
-    <WebDashboard
-      user={user}
-      onSignOut={() => signOut(auth())}
-    />
-  ) : (
-    <AuthPage backendSlow={slowBoot} />
+  return (
+    <main className="min-h-screen w-full bg-[#0B0F19] text-slate-100 font-sans antialiased relative">
+      {!isNative && (
+        <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md shadow-2xl">
+          <button
+            onClick={() => switchView("web")}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition ${
+              !showApk ? "bg-blue-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Web Controller
+          </button>
+          <button
+            onClick={() => switchView("apk")}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition ${
+              showApk ? "bg-emerald-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            APK Sentinel
+          </button>
+        </div>
+      )}
+      {content}
+    </main>
   );
 }

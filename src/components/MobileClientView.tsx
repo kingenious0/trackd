@@ -16,10 +16,15 @@ import {
   Radio,
   Loader2
 } from "lucide-react";
+import type { User } from "firebase/auth";
 import { TrackdBridge, type LinkState } from "../plugins/trackd";
 import { projectId } from "../lib/firebase";
 
-export default function MobileClientView() {
+interface Props {
+  user?: User | null;
+}
+
+export default function MobileClientView({ user: _user }: Props = {}) {
   const [loading, setLoading] = useState(true);
   const [pin, setPin] = useState("");
   const [emergencyPhone, setEmergencyPhone] = useState("");
