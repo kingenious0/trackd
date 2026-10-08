@@ -16,6 +16,7 @@ export default function ActionToolbar({ device, onCommand, demo = false }: Props
   const [busy, setBusy] = useState<BusyKey>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
+  const ENABLE_REMOTE_WIPE_V2 = false; // Factory wipe held for V2 (code preserved)
 
   const run = async (command: RemoteCommand) => {
     setBusy(command);
@@ -98,18 +99,21 @@ export default function ActionToolbar({ device, onCommand, demo = false }: Props
           Mark safe
         </button>
 
-        <button
-          className="btn-danger-outline !rounded-xl !py-3"
-          disabled={busy !== null}
-          onClick={() => setWipeOpen(true)}
-        >
-          {busy === "WIPE" ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <TriangleAlert className="h-4 w-4" />
-          )}
-          Factory wipe
-        </button>
+        {/* V2: Factory wipe held for V2 (Code preserved) */}
+        {ENABLE_REMOTE_WIPE_V2 && (
+          <button
+            className="btn-danger-outline !rounded-xl !py-3"
+            disabled={busy !== null}
+            onClick={() => setWipeOpen(true)}
+          >
+            {busy === "WIPE" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <TriangleAlert className="h-4 w-4" />
+            )}
+            Factory wipe
+          </button>
+        )}
       </div>
 
       {message && (

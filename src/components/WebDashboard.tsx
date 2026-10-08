@@ -97,6 +97,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [showWipeDialog, setShowWipeDialog] = useState(false);
+  const ENABLE_REMOTE_WIPE_V2 = false; // Remote Factory Wipe held for V2 (code preserved)
   const [dispatching, setDispatching] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [darkMapMode, setDarkMapMode] = useState(false);
@@ -541,13 +542,16 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                 </button>
               )}
 
-              <button 
-                onClick={() => setShowWipeDialog(true)}
-                disabled={dispatching !== null}
-                className="w-full py-3 px-4 rounded-2xl bg-transparent hover:bg-rose-950/20 text-slate-500 hover:text-rose-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remote Factory Wipe
-              </button>
+              {/* V2: Remote Factory Wipe held for V2 (Code preserved) */}
+              {ENABLE_REMOTE_WIPE_V2 && (
+                <button 
+                  onClick={() => setShowWipeDialog(true)}
+                  disabled={dispatching !== null}
+                  className="w-full py-3 px-4 rounded-2xl bg-transparent hover:bg-rose-950/20 text-slate-500 hover:text-rose-400 text-xs font-semibold flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remote Factory Wipe
+                </button>
+              )}
             </div>
 
             {/* Offline SMS Fail-Safe Cards */}

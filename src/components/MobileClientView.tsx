@@ -225,10 +225,96 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   }, []);
 
   // ----------------------------------------------------
+  // Feature Flags: V2 Capabilities on hold (code preserved)
+  // ----------------------------------------------------
+  const ENABLE_REMOTE_LOCK_ERASE_V2 = false;
+
+  // ----------------------------------------------------
+  // Permission Checklist Definition & Dynamic Sorting
+  // ----------------------------------------------------
+  const permissionItems = useMemo(() => {
+    const list = [
+      {
+        key: 'location' as const,
+        title: 'Always-on location',
+        subtitle: 'Needs one tap',
+        icon: MapPin,
+        isGranted: perms.location,
+        action: async () => {
+          triggerHaptic('light');
+          const res = await TrackdBridge.requestPermissions({ permissions: ['location'] }).catch(() => null);
+          const granted = (res as unknown as Record<string, string>)?.['location'] === 'granted';
+          if (!granted) await TrackdBridge.openAppSettings().catch(() => null);
+        }
+      },
+      {
+        key: 'sms' as const,
+        title: 'Find phone offline',
+        subtitle: 'Needs one tap',
+        icon: MessageSquare,
+        isGranted: perms.sms,
+        action: async () => {
+          triggerHaptic('light');
+          const res = await TrackdBridge.requestPermissions({ permissions: ['sms'] }).catch(() => null);
+          const granted = (res as unknown as Record<string, string>)?.['sms'] === 'granted';
+          if (!granted) await TrackdBridge.openAppSettings().catch(() => null);
+        }
+      },
+      // V2 Feature: Remote Lock and Erase (Device Admin) held for V2
+      ...(ENABLE_REMOTE_LOCK_ERASE_V2 ? [{
+        key: 'admin' as const,
+        title: 'Remote lock and erase',
+        subtitle: 'Needs one tap',
+        icon: Lock,
+        isGranted: perms.admin,
+        action: async () => {
+          triggerHaptic('light');
+          await TrackdBridge.requestDeviceAdmin();
+        }
+      }] : []),
+      {
+        key: 'battery' as const,
+        title: 'Keep app running',
+        subtitle: 'Needs one tap',
+        icon: Zap,
+        isGranted: perms.battery,
+        action: async () => {
+          triggerHaptic('light');
+          await TrackdBridge.requestIgnoreBatteryOptimization();
+        }
+      },
+      {
+        key: 'accessibility' as const,
+        title: 'Prevent power off',
+        subtitle: 'Needs one tap',
+        icon: AlertTriangle,
+        isGranted: perms.accessibility,
+        action: async () => {
+          triggerHaptic('light');
+          await TrackdBridge.openAccessibilitySettings();
+        }
+      },
+      {
+        key: 'overlay' as const,
+        title: 'Lock screen message',
+        subtitle: 'Needs one tap',
+        icon: Eye,
+        isGranted: perms.overlay,
+        action: async () => {
+          triggerHaptic('light');
+          await TrackdBridge.requestOverlayPermission();
+        }
+      },
+    ];
+    return list;
+  }, [perms, ENABLE_REMOTE_LOCK_ERASE_V2]);
+
+  // ----------------------------------------------------
   // Determine 4-State Security Model
   // ----------------------------------------------------
-  const activeSteps = useMemo(() => Object.values(perms).filter(Boolean).length, [perms]);
-  const isAllPermsActive = activeSteps === 6;
+  const totalSteps = permissionItems.length;
+  const activeSteps = useMemo(() => permissionItems.filter((item) => item.isGranted).length, [permissionItems]);
+  const isAllPermsActive = activeSteps === totalSteps;
 
   const currentViewState: ViewState = useMemo(() => {
     if (isStolen) return 'stolen';
@@ -236,82 +322,6 @@ export default function MobileClientView({ user: _user }: Props = {}) {
     if (isAllPermsActive) return 'armed';
     return 'degraded';
   }, [isStolen, linkState.configured, forceSetupWizard, isAllPermsActive]);
-
-  // ----------------------------------------------------
-  // Permission Checklist Definition & Dynamic Sorting
-  // ----------------------------------------------------
-  const permissionItems = useMemo(() => [
-    {
-      key: 'location' as const,
-      title: 'Always-on location',
-      subtitle: 'Needs one tap',
-      icon: MapPin,
-      isGranted: perms.location,
-      action: async () => {
-        triggerHaptic('light');
-        const res = await TrackdBridge.requestPermissions({ permissions: ['location'] }).catch(() => null);
-        const granted = (res as unknown as Record<string, string>)?.['location'] === 'granted';
-        if (!granted) await TrackdBridge.openAppSettings().catch(() => null);
-      }
-    },
-    {
-      key: 'sms' as const,
-      title: 'Find phone offline',
-      subtitle: 'Needs one tap',
-      icon: MessageSquare,
-      isGranted: perms.sms,
-      action: async () => {
-        triggerHaptic('light');
-        const res = await TrackdBridge.requestPermissions({ permissions: ['sms'] }).catch(() => null);
-        const granted = (res as unknown as Record<string, string>)?.['sms'] === 'granted';
-        if (!granted) await TrackdBridge.openAppSettings().catch(() => null);
-      }
-    },
-    {
-      key: 'admin' as const,
-      title: 'Remote lock and erase',
-      subtitle: 'Needs one tap',
-      icon: Lock,
-      isGranted: perms.admin,
-      action: async () => {
-        triggerHaptic('light');
-        await TrackdBridge.requestDeviceAdmin();
-      }
-    },
-    {
-      key: 'battery' as const,
-      title: 'Keep app running',
-      subtitle: 'Needs one tap',
-      icon: Zap,
-      isGranted: perms.battery,
-      action: async () => {
-        triggerHaptic('light');
-        await TrackdBridge.requestIgnoreBatteryOptimization();
-      }
-    },
-    {
-      key: 'accessibility' as const,
-      title: 'Prevent power off',
-      subtitle: 'Needs one tap',
-      icon: AlertTriangle,
-      isGranted: perms.accessibility,
-      action: async () => {
-        triggerHaptic('light');
-        await TrackdBridge.openAccessibilitySettings();
-      }
-    },
-    {
-      key: 'overlay' as const,
-      title: 'Lock screen message',
-      subtitle: 'Needs one tap',
-      icon: Eye,
-      isGranted: perms.overlay,
-      action: async () => {
-        triggerHaptic('light');
-        await TrackdBridge.requestOverlayPermission();
-      }
-    },
-  ], [perms]);
 
   // In degraded mode, items missing float to top!
   const sortedChecklist = useMemo(() => {
@@ -782,7 +792,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               Offline Master PIN
             </h1>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              A 4-digit code to control this phone by SMS (locate, lock, wipe, siren) even when it has zero cellular data or WiFi.
+              A 4-digit code to control this phone by SMS (locate, siren, emergency lock) even when it has zero cellular data or WiFi.
             </p>
 
             <div className="my-6">
@@ -926,17 +936,20 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               Activate Anti-Theft Armor
             </h1>
             <p className="text-center text-xs text-slate-300 mt-2 px-2 leading-relaxed">
-              Grants system permission to lock, factory reset remotely, and block thieves from powering down the device.
+              Grants system permission to keep running in background and block thieves from powering down the device.
             </p>
 
             <div className="mt-6 rounded-2xl bg-[#1C1D21] border border-white/5 divide-y divide-white/5 overflow-hidden text-left mb-6">
-              <button 
-                onClick={() => TrackdBridge.requestDeviceAdmin()}
-                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
-              >
-                <span className="text-xs text-slate-200 font-medium">Remote Lock & Erase</span>
-                {perms.admin ? <Check className="w-4 h-4 text-[#00E699]" /> : <span className="text-[11px] text-[#3B82F6] font-semibold">Allow &gt;</span>}
-              </button>
+              {/* V2: Remote Lock & Erase (Device Admin) held for V2 */}
+              {ENABLE_REMOTE_LOCK_ERASE_V2 && (
+                <button 
+                  onClick={() => TrackdBridge.requestDeviceAdmin()}
+                  className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
+                >
+                  <span className="text-xs text-slate-200 font-medium">Remote Lock & Erase</span>
+                  {perms.admin ? <Check className="w-4 h-4 text-[#00E699]" /> : <span className="text-[11px] text-[#3B82F6] font-semibold">Allow &gt;</span>}
+                </button>
+              )}
               <button 
                 onClick={() => TrackdBridge.requestIgnoreBatteryOptimization()}
                 className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
@@ -1031,7 +1044,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               stroke={isAllPermsActive ? '#00E699' : '#F59E0B'}
               strokeWidth="6"
               strokeDasharray={2 * Math.PI * 40}
-              strokeDashoffset={2 * Math.PI * 40 * (1 - activeSteps / 6)}
+              strokeDashoffset={2 * Math.PI * 40 * (1 - activeSteps / totalSteps)}
               strokeLinecap="round"
               fill="transparent"
               className="transition-all duration-500 ease-out"
@@ -1041,7 +1054,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           {/* Central Dial Text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-2xl font-black text-white tracking-tight leading-none">
-              {activeSteps}/6
+              {activeSteps}/{totalSteps}
             </span>
           </div>
         </div>
@@ -1054,7 +1067,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         ) : (
           <div className="mt-0.5">
             <h2 className="text-sm font-bold text-white leading-tight">
-              {6 - activeSteps} {6 - activeSteps === 1 ? 'step' : 'steps'} left
+              {totalSteps - activeSteps} {totalSteps - activeSteps === 1 ? 'step' : 'steps'} left
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
               Finish to be fully protected

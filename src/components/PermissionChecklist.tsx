@@ -131,6 +131,8 @@ export default function PermissionChecklist() {
     actionLabel?: string;
     action?: () => Promise<unknown>;
   }[] = [
+    /* V2: Device Admin / Remote Wipe held for V2 (code preserved) */
+    /*
     {
       key: "admin",
       label: "Device Admin",
@@ -139,6 +141,7 @@ export default function PermissionChecklist() {
       actionLabel: "Enable",
       action: () => TrackdBridge.requestDeviceAdmin()
     },
+    */
     {
       key: "location",
       label: "Location",
