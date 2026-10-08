@@ -16,15 +16,33 @@ const pinIcon = L.icon({
 
 const FALLBACK_CENTER: LatLngTuple = [5.6037, -0.187];
 
-const TILES = {
-  light: {
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  },
-  dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  }
+const CARTO_KEY = (import.meta.env.VITE_CARTO_API_KEY as string | undefined)?.trim();
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const CARTO_ATTR = `${OSM_ATTR} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
+
+const TILES: Record<"light" | "dark", { url: string; attribution: string; className: string }> = {
+  light: CARTO_KEY
+    ? {
+        url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`,
+        attribution: CARTO_ATTR,
+        className: ""
+      }
+    : {
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: OSM_ATTR,
+        className: ""
+      },
+  dark: CARTO_KEY
+    ? {
+        url: `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${CARTO_KEY}`,
+        attribution: CARTO_ATTR,
+        className: ""
+      }
+    : {
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: OSM_ATTR,
+        className: "tile-inverted"
+      }
 };
 
 function FlyToLatest({ position }: { position: LatLngTuple | null }) {
@@ -65,7 +83,11 @@ export default function MapPanel({ telemetry, theme, stolen = false }: Props) {
         zoomControl={false}
         className="leaflet-container"
       >
-        <TileLayer url={TILES[theme].url} attribution={TILES[theme].attribution} />
+        <TileLayer
+          url={TILES[theme].url}
+          attribution={TILES[theme].attribution}
+          className={TILES[theme].className}
+        />
         <ZoomControl position="bottomright" />
         <FlyToLatest position={latest ? [latest.lat, latest.lng] : null} />
 
