@@ -253,6 +253,22 @@ class TrackdBridgePlugin : Plugin() {
     }
 
     @PluginMethod
+    fun unlinkAccount(call: PluginCall) {
+        try {
+            FirestoreSync.stopCommandListener()
+            FirebaseAuth.getInstance().signOut()
+            AegisState.remove(context, AegisState.KEY_USER_ID)
+            AegisState.remove(context, AegisState.KEY_USER_EMAIL)
+            AegisState.remove(context, AegisState.KEY_DEVICE_ID)
+            val response = JSObject()
+            response.put("unlinked", true)
+            call.resolve(response)
+        } catch (e: Exception) {
+            call.reject("Failed to unlink account", e)
+        }
+    }
+
+    @PluginMethod
     fun markStolen(call: PluginCall) {
         val stolen = call.getBoolean("stolen", true) ?: true
         AegisState.setStolen(context, stolen)

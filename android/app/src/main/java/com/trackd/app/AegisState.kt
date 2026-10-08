@@ -51,6 +51,10 @@ object AegisState {
         prefs(context).edit().putString(key, value).apply()
     }
 
+    fun remove(context: Context, key: String) {
+        prefs(context).edit().remove(key).apply()
+    }
+
     fun getString(context: Context, key: String): String? =
         prefs(context).getString(key, null)
 

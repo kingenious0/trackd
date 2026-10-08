@@ -43,6 +43,7 @@ export interface TrackdBridgePlugin {
     deviceId: string;
     projectId: string;
   }): Promise<{ uid: string }>;
+  unlinkAccount(): Promise<{ unlinked: boolean }>;
   checkAccessibilityPermission(): Promise<{ enabled: boolean }>;
   openAccessibilitySettings(): Promise<void>;
   openAppSettings(): Promise<void>;
@@ -87,8 +88,26 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   async saveDeviceCredentials(): Promise<{ saved: boolean }> {
     return { saved: true };
   }
-  async configureAccount(): Promise<{ uid: string }> {
-    throw this.unavailable("Account linking is only available on Android");
+  async configureAccount(options: {
+    email: string;
+    password: string;
+    deviceId: string;
+    projectId: string;
+  }): Promise<{ uid: string }> {
+    localStorage.setItem(
+      "trackd_link_state",
+      JSON.stringify({
+        configured: true,
+        deviceId: options.deviceId,
+        uid: "mock-uid-" + options.email,
+        email: options.email
+      })
+    );
+    return { uid: "mock-uid-" + options.email };
+  }
+  async unlinkAccount(): Promise<{ unlinked: boolean }> {
+    localStorage.removeItem("trackd_link_state");
+    return { unlinked: true };
   }
   async checkAccessibilityPermission(): Promise<{ enabled: boolean }> {
     return { enabled: false };
@@ -121,6 +140,12 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
     return { permissions: {} };
   }
   async getLinkState(): Promise<LinkState> {
+    const raw = localStorage.getItem("trackd_link_state");
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {}
+    }
     return { configured: false, deviceId: null, uid: null, email: null };
   }
   async isBatteryOptimizationIgnored(): Promise<{ ignored: boolean }> {
