@@ -605,41 +605,18 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               {isSignUp ? 'Create your Trackd account' : 'Welcome back'}
             </h1>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Use this same account on the Trackd website to find this phone if it's ever lost.
+              Use this same account on the Trackd website to find this phone if it is ever lost.
             </p>
-
-            {/* Google Quick Button */}
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                setEmailInput('owner@trackd.local');
-                setPasswordInput('Password123!');
-              }}
-              className="mt-5 w-full py-2.5 rounded-xl bg-[#1C1D21] hover:bg-[#23242A] border border-white/5 flex items-center justify-center gap-2 text-xs font-semibold text-slate-200 active:scale-[0.98] transition"
-            >
-              <span className="w-4 h-4 rounded-full bg-white text-black font-black text-[10px] flex items-center justify-center leading-none">
-                G
-              </span>
-              <span>Continue with Google</span>
-            </button>
-
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">or</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
 
             {/* Error Message */}
             {authError && (
-              <div className="mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
+              <div className="mt-4 mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
                 {authError}
               </div>
             )}
 
             {/* Form */}
-            <form onSubmit={handleAuthSubmit} className="space-y-2.5">
+            <form onSubmit={handleAuthSubmit} className="mt-4 space-y-2.5">
               <div className="relative">
                 <input 
                   type="email"
@@ -1236,36 +1213,44 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   );
 
   // =========================================================================
-  // MODAL: Master PIN Gate Keypad (Matching Reference Image 3)
+  // MODAL: Master PIN Gate Keypad (Matching Reference Image)
   // =========================================================================
   function renderPinGateModal() {
     if (!pinGateOpen) return null;
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end justify-center animate-in fade-in duration-200">
-        <div className="w-full max-w-sm rounded-t-3xl bg-[#1C1D21] border-t border-white/10 p-6 flex flex-col items-center shadow-2xl animate-in slide-in-from-bottom duration-300">
-          
-          {/* Top Subtle Drag Handle */}
+      <div 
+        onClick={() => {
+          setPinGateOpen(false);
+          setEnteredPin('');
+        }}
+        className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end justify-center p-3 sm:pb-6 animate-in fade-in duration-200"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[340px] rounded-[28px] bg-[#141518] border border-white/10 p-6 pt-3 flex flex-col items-center shadow-2xl animate-in slide-in-from-bottom duration-300"
+        >
+          {/* Top Drag Handle */}
           <div className="w-10 h-1 rounded-full bg-white/20 mb-4" />
 
           {/* Title */}
-          <h2 className="text-base font-bold text-white">
-            Enter your Master PIN
+          <h2 className="text-base font-semibold text-white tracking-tight">
+            Enter your Trackd PIN
           </h2>
 
-          {/* 4 PIN Dots */}
-          <div className="flex items-center gap-4 my-6">
+          {/* 4 PIN Indicator Dots */}
+          <div className="flex items-center justify-center gap-3.5 my-5">
             {[0, 1, 2, 3].map((idx) => {
               const isFilled = enteredPin.length > idx;
               return (
                 <div 
                   key={idx}
-                  className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
+                  className={`w-3 h-3 rounded-full transition-all duration-150 ${
                     pinError
                       ? 'bg-rose-500 scale-125 animate-shake'
                       : isFilled
-                      ? 'bg-white scale-110'
-                      : 'border border-white/30'
+                      ? 'bg-white scale-105'
+                      : 'border border-white/40 bg-transparent'
                   }`}
                 />
               );
@@ -1273,60 +1258,49 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           </div>
 
           {/* Keypad Grid (3 Columns, 4 Rows) */}
-          <div className="grid grid-cols-3 gap-x-6 gap-y-4 w-full max-w-[240px] my-2">
+          <div className="grid grid-cols-3 gap-2.5 w-full max-w-[270px] mx-auto">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
               <button
                 key={digit}
                 type="button"
                 onClick={() => handleKeypadPress(digit)}
-                className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 text-xl font-medium text-white flex items-center justify-center transition active:scale-95 mx-auto"
+                className="h-13 py-3 rounded-2xl bg-[#1B1D21] hover:bg-[#23252A] active:bg-[#2B2E35] text-xl font-medium text-white flex items-center justify-center transition active:scale-95 select-none"
               >
                 {digit}
               </button>
             ))}
 
-            {/* Fingerprint Biometric Key */}
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                // Simulate biometric pass
-                verifyEnteredPin(pin);
-              }}
-              className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 text-slate-300 flex items-center justify-center transition active:scale-95 mx-auto"
-            >
-              <Fingerprint className="w-6 h-6 text-[#3B82F6]" />
-            </button>
+            {/* Row 4: Empty placeholder, 0, Backspace */}
+            <div className="h-13" />
 
-            {/* 0 Key */}
             <button
               type="button"
               onClick={() => handleKeypadPress('0')}
-              className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 text-xl font-medium text-white flex items-center justify-center transition active:scale-95 mx-auto"
+              className="h-13 py-3 rounded-2xl bg-[#1B1D21] hover:bg-[#23252A] active:bg-[#2B2E35] text-xl font-medium text-white flex items-center justify-center transition active:scale-95 select-none"
             >
               0
             </button>
 
-            {/* Backspace Key */}
             <button
               type="button"
               onClick={handleKeypadBackspace}
-              className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/20 text-slate-300 flex items-center justify-center transition active:scale-95 mx-auto"
+              className="h-13 py-3 rounded-2xl bg-[#1B1D21] hover:bg-[#23252A] active:bg-[#2B2E35] text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95 select-none"
             >
               <Delete className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Cancel Close Button */}
+          {/* Use Fingerprint Action */}
           <button
             type="button"
             onClick={() => {
-              setPinGateOpen(false);
-              setEnteredPin('');
+              triggerHaptic('light');
+              verifyEnteredPin(pin || '7492');
             }}
-            className="mt-4 text-xs font-semibold text-slate-400 hover:text-white py-1"
+            className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-[#38bdf8] hover:text-[#60a5fa] active:scale-95 transition"
           >
-            Cancel
+            <Fingerprint className="w-5 h-5 text-[#38bdf8]" />
+            <span>Use fingerprint</span>
           </button>
         </div>
       </div>

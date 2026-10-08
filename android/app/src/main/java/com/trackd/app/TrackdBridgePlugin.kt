@@ -106,13 +106,27 @@ class TrackdBridgePlugin : Plugin() {
     fun saveEmergencyContact(call: PluginCall) {
         val phone = call.getString("phone")
         val pin = call.getString("pin")
-        if (phone.isNullOrBlank() || pin.isNullOrBlank() || pin.length < 4) {
-            call.reject("phone and a PIN of at least 4 characters are required")
-            return
+
+        var modified = false
+        if (!pin.isNullOrBlank()) {
+            if (pin.trim().length >= 4) {
+                AegisState.putString(context, AegisState.KEY_MASTER_PIN_HASH, sha256(pin.trim()))
+                modified = true
+            } else {
+                call.reject("PIN must be at least 4 digits")
+                return
+            }
         }
 
-        AegisState.putString(context, AegisState.KEY_EMERGENCY_PHONE, phone.trim())
-        AegisState.putString(context, AegisState.KEY_MASTER_PIN_HASH, sha256(pin))
+        if (!phone.isNullOrBlank()) {
+            AegisState.putString(context, AegisState.KEY_EMERGENCY_PHONE, phone.trim())
+            modified = true
+        }
+
+        if (!modified) {
+            call.reject("phone or a PIN of at least 4 digits is required")
+            return
+        }
 
         val serial = readSimSerial()
         if (!serial.isNullOrBlank()) {
