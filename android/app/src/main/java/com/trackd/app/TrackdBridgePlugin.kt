@@ -156,8 +156,8 @@ class TrackdBridgePlugin : Plugin() {
                     response.put("uid", uid)
                     call.resolve(response)
                 }
-        } catch (error: Throwable) {
-            call.reject("firebase unavailable — add google-services.json", error)
+        } catch (error: Exception) {
+            call.reject("Sign-in is unavailable right now. Please try again.", error)
         }
     }
 
@@ -221,7 +221,7 @@ class TrackdBridgePlugin : Plugin() {
 
     private fun readSimSerial(): String? {
         return try {
-            if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) ==
+            if (context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) ==
                 PackageManager.PERMISSION_GRANTED
             ) {
                 val telephony =

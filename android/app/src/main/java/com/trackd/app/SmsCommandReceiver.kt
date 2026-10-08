@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.telephony.SmsManager
 import android.telephony.TelephonyManager

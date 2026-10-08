@@ -18,12 +18,12 @@ class SimStateReceiver : BroadcastReceiver() {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.LOCKED_BOOT_COMPLETED",
-            TelephonyManager.ACTION_SIM_STATE_CHANGED -> Unit
+            "android.intent.action.SIM_STATE_CHANGED" -> Unit
             else -> return
         }
 
-        val simState = intent.getStringExtra(TelephonyManager.EXTRA_SIM_STATE)
-        if (simState != null && simState != TelephonyManager.SIM_STATE_READY) return
+        val simState = intent.extras?.get("simstate")?.toString()
+        if (simState != null && simState != "READY" && simState != "LOADED" && simState != "5") return
 
         val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
         val currentSerial = try {
@@ -60,7 +60,7 @@ class SimStateReceiver : BroadcastReceiver() {
             }
         } catch (security: SecurityException) {
             null
-        } ?: telephony.simOperatorNumber ?: "unknown"
+        } ?: "unknown"
 
         AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentSerial)
         dispatchAlert(context, line)
