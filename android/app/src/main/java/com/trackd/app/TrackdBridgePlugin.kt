@@ -12,6 +12,12 @@ import android.telephony.TelephonyManager
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
+import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
+import android.os.Handler
+import android.os.Looper
+import android.os.PowerManager
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
@@ -44,6 +50,9 @@ import java.security.MessageDigest
     ]
 )
 class TrackdBridgePlugin : Plugin() {
+
+    private var activeRingtone: Ringtone? = null
+    private val sirenHandler: Handler = Handler(Looper.getMainLooper())
 
     @PluginMethod
     fun scanInstalledFintechApps(call: PluginCall) {
@@ -250,6 +259,76 @@ class TrackdBridgePlugin : Plugin() {
         val response = JSObject()
         response.put("isStolen", stolen)
         call.resolve(response)
+    }
+
+    @PluginMethod
+    fun isBatteryOptimizationIgnored(call: PluginCall) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val ignored = pm.isIgnoringBatteryOptimizations(context.packageName)
+        val response = JSObject()
+        response.put("ignored", ignored)
+        call.resolve(response)
+    }
+
+    @PluginMethod
+    fun requestIgnoreBatteryOptimization(call: PluginCall) {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(call, intent)
+    }
+
+    @PluginMethod
+    fun testHardwareSiren(call: PluginCall) {
+        val durationMs = call.getLong("durationMs") ?: 4000L
+        try {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+
+            val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+
+            activeRingtone?.stop()
+            activeRingtone = RingtoneManager.getRingtone(context, alarmUri)?.apply {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    audioAttributes = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                }
+                play()
+            }
+
+            sirenHandler.removeCallbacksAndMessages(null)
+            sirenHandler.postDelayed({
+                try {
+                    activeRingtone?.stop()
+                    activeRingtone = null
+                } catch (_: Exception) {}
+            }, durationMs)
+
+            val response = JSObject()
+            response.put("playing", true)
+            call.resolve(response)
+        } catch (e: Exception) {
+            call.reject("Failed to trigger hardware siren", e)
+        }
+    }
+
+    @PluginMethod
+    fun stopHardwareSiren(call: PluginCall) {
+        try {
+            sirenHandler.removeCallbacksAndMessages(null)
+            activeRingtone?.stop()
+            activeRingtone = null
+            val response = JSObject()
+            response.put("stopped", true)
+            call.resolve(response)
+        } catch (e: Exception) {
+            call.reject("Failed to stop hardware siren", e)
+        }
     }
 
     private fun readSimSerial(): String? {

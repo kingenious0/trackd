@@ -244,3 +244,19 @@ export async function appendTelemetry(entry: {
 export async function resetDemo(): Promise<void> {
   demoReset();
 }
+
+export async function wakeDevice(deviceId: string, action: string): Promise<boolean> {
+  if (isDemoMode()) return true;
+  try {
+    const res = await fetch(apiUrl("/api/admin/wake-device"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId, action })
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export type { Device, TelemetryLog, TriggerReason, UserProfile } from "./types";

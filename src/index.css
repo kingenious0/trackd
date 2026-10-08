@@ -84,5 +84,29 @@ html.dark {
 }
 
 .leaflet-control-attribution {
-  @apply bg-panel/80 text-[10px] text-muted;
+  @apply bg-white/70 backdrop-blur-md text-[10px] text-slate-500 rounded-tl-lg px-2 py-0.5 shadow-sm border border-black/5;
+}
+
+/* Apple Maps floating card popup */
+.apple-popup .leaflet-popup-content-wrapper {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18), 0 0 1px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  padding: 4px;
+}
+
+.apple-popup .leaflet-popup-tip {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.apple-popup .leaflet-popup-content {
+  margin: 10px 14px;
+  line-height: 1.4;
+}
+
+/* Tactical Dark Tile Filter (Zero API keys, transforms standard OSM into dark map) */
+.dark-osm-tiles .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(92%);
 }
