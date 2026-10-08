@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { adminDb } from "../_lib/admin";
+import { adminDb } from "../_lib/admin.js";
 
 const MAX_ATTEMPTS = 5;
 

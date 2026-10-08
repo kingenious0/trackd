@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getMessaging } from "firebase-admin/messaging";
-import { adminApp, adminDb } from "../_lib/admin";
+import { adminApp, adminDb } from "../_lib/admin.js";
 
 const ACTIONS = new Set(["LOCATE", "STOLEN", "SAFE", "WIPE"]);
 

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
-import { adminDb } from "../_lib/admin";
+import { adminDb } from "../_lib/admin.js";
 
 const E164 = /^\+\d{7,15}$/;
 const OTP_TTL_MS = 5 * 60 * 1000;
