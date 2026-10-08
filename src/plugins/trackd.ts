@@ -16,6 +16,15 @@ export interface DeviceStatus {
   accessibilityEnabled: boolean;
   emergencyContact: string | null;
   simRegistered: boolean;
+  batteryLevel?: number;
+  overlayEnabled?: boolean;
+  deviceModel?: string;
+  deviceManufacturer?: string;
+  deviceBrand?: string;
+  hasPinConfigured?: boolean;
+  locationGranted?: boolean;
+  smsGranted?: boolean;
+  batteryOptimizationIgnored?: boolean;
 }
 
 export interface PermissionsOverview {
@@ -167,65 +176,90 @@ const rawBridge = registerPlugin<TrackdBridgePlugin>("TrackdBridge", {
   web: () => new WebTrackdBridge()
 });
 
+export type ExtendedTrackdBridge = TrackdBridgePlugin & {
+  checkPermissionsStatus(): Promise<PermissionsOverview>;
+  setCommandCredentials(options: { pin: string; emergencyPhone?: string }): Promise<{ saved: boolean }>;
+  requestBackgroundLocation(): Promise<void>;
+  requestSmsPermissions(): Promise<void>;
+  openOverlaySettings(): Promise<void>;
+};
+
 /**
- * Extended TrackdBridge with convenient helper methods for MobileClientView.
+ * Extended TrackdBridge with proxy delegation for native Capacitor bridge.
  */
-export const TrackdBridge = {
-  ...rawBridge,
+export const TrackdBridge: ExtendedTrackdBridge = new Proxy(rawBridge as unknown as ExtendedTrackdBridge, {
+  get(target, prop, receiver) {
+    if (prop === 'checkPermissionsStatus') {
+      return async (): Promise<PermissionsOverview> => {
+        try {
+          const [deviceStatus, permResult, battResult] = await Promise.all([
+            rawBridge.getDeviceStatus().catch(() => ({
+              deviceAdminActive: false,
+              accessibilityEnabled: false,
+              isStolen: false,
+              emergencyContact: null,
+              simRegistered: false,
+            } as DeviceStatus)),
+            rawBridge.checkPermissions({ permissions: ["location", "sms"] }).catch(() => ({
+              permissions: {} as Record<string, string>
+            })),
+            rawBridge.isBatteryOptimizationIgnored().catch(() => ({ ignored: false }))
+          ]);
 
-  async checkPermissionsStatus(): Promise<PermissionsOverview> {
-    try {
-      const [deviceStatus, permResult, battResult] = await Promise.all([
-        rawBridge.getDeviceStatus().catch(() => ({
-          deviceAdminActive: false,
-          accessibilityEnabled: false
-        })),
-        rawBridge.checkPermissions({ permissions: ["location", "sms"] }).catch(() => ({
-          permissions: {} as Record<string, string>
-        })),
-        rawBridge.isBatteryOptimizationIgnored().catch(() => ({ ignored: false }))
-      ]);
+          const rawPermMap = (permResult as unknown as Record<string, string>) ?? {};
+          const nestedPermMap = (permResult.permissions ?? {}) as Record<string, string>;
+          const locGranted = Boolean(deviceStatus.locationGranted || rawPermMap["location"] === "granted" || nestedPermMap["location"] === "granted");
+          const smsGranted = Boolean(deviceStatus.smsGranted || rawPermMap["sms"] === "granted" || nestedPermMap["sms"] === "granted");
 
-      const permissionsMap = (permResult.permissions ?? {}) as Record<string, string>;
-      const locGranted = permissionsMap["location"] === "granted";
-      const smsGranted = permissionsMap["sms"] === "granted";
-
-      return {
-        deviceAdmin: Boolean(deviceStatus.deviceAdminActive),
-        batteryOptimizationIgnored: Boolean(battResult.ignored),
-        backgroundLocation: locGranted,
-        accessibilityService: Boolean(deviceStatus.accessibilityEnabled),
-        overlay: false, // will update if granted
-        smsPermission: smsGranted
-      };
-    } catch {
-      return {
-        deviceAdmin: false,
-        batteryOptimizationIgnored: false,
-        backgroundLocation: false,
-        accessibilityService: false,
-        overlay: false,
-        smsPermission: false
+          return {
+            deviceAdmin: Boolean(deviceStatus.deviceAdminActive),
+            batteryOptimizationIgnored: Boolean(deviceStatus.batteryOptimizationIgnored || battResult.ignored),
+            backgroundLocation: locGranted,
+            accessibilityService: Boolean(deviceStatus.accessibilityEnabled),
+            overlay: Boolean(deviceStatus.overlayEnabled),
+            smsPermission: smsGranted
+          };
+        } catch {
+          return {
+            deviceAdmin: false,
+            batteryOptimizationIgnored: false,
+            backgroundLocation: false,
+            accessibilityService: false,
+            overlay: false,
+            smsPermission: false
+          };
+        }
       };
     }
-  },
 
-  async setCommandCredentials(options: { pin: string; emergencyPhone?: string }): Promise<{ saved: boolean }> {
-    return rawBridge.saveEmergencyContact({
-      phone: options.emergencyPhone || "",
-      pin: options.pin
-    });
-  },
+    if (prop === 'setCommandCredentials') {
+      return async (options: { pin: string; emergencyPhone?: string }): Promise<{ saved: boolean }> => {
+        return rawBridge.saveEmergencyContact({
+          phone: options.emergencyPhone || "",
+          pin: options.pin
+        });
+      };
+    }
 
-  async requestBackgroundLocation(): Promise<void> {
-    await rawBridge.requestPermissions({ permissions: ["location"] });
-  },
+    if (prop === 'requestBackgroundLocation') {
+      return async (): Promise<void> => {
+        await rawBridge.requestPermissions({ permissions: ["location"] });
+      };
+    }
 
-  async requestSmsPermissions(): Promise<void> {
-    await rawBridge.requestPermissions({ permissions: ["sms"] });
-  },
+    if (prop === 'requestSmsPermissions') {
+      return async (): Promise<void> => {
+        await rawBridge.requestPermissions({ permissions: ["sms"] });
+      };
+    }
 
-  async openOverlaySettings(): Promise<void> {
-    await rawBridge.requestOverlayPermission();
+    if (prop === 'openOverlaySettings') {
+      return async (): Promise<void> => {
+        await rawBridge.requestOverlayPermission();
+      };
+    }
+
+    return Reflect.get(target, prop, receiver);
   }
-};
+});
+

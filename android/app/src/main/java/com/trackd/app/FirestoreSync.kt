@@ -172,6 +172,18 @@ object FirestoreSync {
             TelemetryDispatcher.sendNow(context, "LOCATE_REQUEST")
         }
 
+        if (snapshot.getBoolean("requestSiren") == true) {
+            Log.i(TAG, "siren request received via Firestore")
+            db.collection("devices").document(deviceId).update("requestSiren", false)
+            HardwareAlarm.play(context, 20000L)
+        }
+
+        if (snapshot.getBoolean("stopSiren") == true) {
+            Log.i(TAG, "stop siren request received via Firestore")
+            db.collection("devices").document(deviceId).update("stopSiren", false)
+            HardwareAlarm.stop()
+        }
+
         if (snapshot.getBoolean("requestWipe") == true) {
             Log.w(TAG, "wipe command received")
             db.collection("devices").document(deviceId).update("requestWipe", false)

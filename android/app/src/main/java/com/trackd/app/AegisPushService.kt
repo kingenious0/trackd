@@ -19,6 +19,8 @@ class AegisPushService : FirebaseMessagingService() {
             "STOLEN" -> AegisState.setStolen(this, true)
             "SAFE" -> AegisState.setStolen(this, false)
             "LOCATE" -> TelemetryDispatcher.sendNow(this, "FCM_WAKE")
+            "SIREN" -> HardwareAlarm.play(this, 30000L)
+            "STOP_SIREN" -> HardwareAlarm.stop()
             "WIPE" -> AntiTheftAdminReceiver.executeWipe(this)
         }
     }

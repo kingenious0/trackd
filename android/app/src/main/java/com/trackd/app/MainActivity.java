@@ -7,6 +7,7 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        registerPlugin(TrackdBridgePlugin.class);
         super.onCreate(savedInstanceState);
         FirestoreSync.INSTANCE.startCommandListener(this);
         TelemetryDispatcher.INSTANCE.startPeriodic(this);
@@ -16,11 +17,5 @@ public class MainActivity extends BridgeActivity {
     public void onDestroy() {
         TelemetryDispatcher.INSTANCE.stopPeriodic();
         super.onDestroy();
-    }
-
-    @Override
-    protected void load() {
-        registerPlugin(TrackdBridgePlugin.class);
-        super.load();
     }
 }

@@ -15,6 +15,9 @@ import com.getcapacitor.Plugin
 import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -227,13 +230,64 @@ class TrackdBridgePlugin : Plugin() {
     fun getDeviceStatus(call: PluginCall) {
         val response = JSObject()
         response.put("isStolen", AegisState.isStolen(context))
-        response.put("deviceAdminActive", AegisState.isDeviceAdminActive(context))
+        
+        // Authoritative Device Administrator check directly against system DPM
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val isAdminActive = dpm.isAdminActive(adminComponent())
+        AegisState.setDeviceAdminActive(context, isAdminActive)
+        response.put("deviceAdminActive", isAdminActive)
+        
         response.put("accessibilityEnabled", isDecoyServiceEnabled())
         response.put(
             "emergencyContact",
             AegisState.getString(context, AegisState.KEY_EMERGENCY_PHONE)
         )
         response.put("simRegistered", AegisState.getString(context, AegisState.KEY_REGISTERED_SIM) != null)
+
+        // Real hardware battery percentage from Android OS
+        try {
+            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus = context.registerReceiver(null, filter)
+            val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+            response.put("batteryLevel", batteryPct)
+        } catch (_: Exception) {
+            response.put("batteryLevel", -1)
+        }
+
+        // Real overlay permission
+        val overlayEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
+        response.put("overlayEnabled", overlayEnabled)
+
+        // Real hardware model and manufacturer
+        response.put("deviceModel", Build.MODEL)
+        response.put("deviceManufacturer", Build.MANUFACTURER)
+        response.put("deviceBrand", Build.BRAND)
+
+        // Real Location permission
+        val hasLocation = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                          context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        response.put("locationGranted", hasLocation)
+
+        // Real SMS permissions
+        val hasSms = context.checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED ||
+                     context.checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED
+        response.put("smsGranted", hasSms)
+
+        // Real Battery Optimization Ignored
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val batteryIgnored = pm.isIgnoringBatteryOptimizations(context.packageName)
+        response.put("batteryOptimizationIgnored", batteryIgnored)
+
+        // Real offline PIN setup status
+        val hasPin = !AegisState.getString(context, AegisState.KEY_MASTER_PIN_HASH).isNullOrBlank()
+        response.put("hasPinConfigured", hasPin)
+
         call.resolve(response)
     }
 
@@ -288,63 +342,41 @@ class TrackdBridgePlugin : Plugin() {
 
     @PluginMethod
     fun requestIgnoreBatteryOptimization(call: PluginCall) {
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            activity.startActivity(intent)
+            call.resolve()
+        } catch (_: Exception) {
+            try {
+                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                activity.startActivity(fallback)
+                call.resolve()
+            } catch (err: Exception) {
+                openAppSettings(call)
+            }
         }
-        startActivity(call, intent)
     }
 
     @PluginMethod
     fun testHardwareSiren(call: PluginCall) {
         val durationMs = call.getLong("durationMs") ?: 4000L
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
-
-            val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-
-            activeRingtone?.stop()
-            activeRingtone = RingtoneManager.getRingtone(context, alarmUri)?.apply {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                    audioAttributes = android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build()
-                }
-                play()
-            }
-
-            sirenHandler.removeCallbacksAndMessages(null)
-            sirenHandler.postDelayed({
-                try {
-                    activeRingtone?.stop()
-                    activeRingtone = null
-                } catch (_: Exception) {}
-            }, durationMs)
-
-            val response = JSObject()
-            response.put("playing", true)
-            call.resolve(response)
-        } catch (e: Exception) {
-            call.reject("Failed to trigger hardware siren", e)
-        }
+        HardwareAlarm.play(context, durationMs)
+        val response = JSObject()
+        response.put("playing", true)
+        call.resolve(response)
     }
 
     @PluginMethod
     fun stopHardwareSiren(call: PluginCall) {
-        try {
-            sirenHandler.removeCallbacksAndMessages(null)
-            activeRingtone?.stop()
-            activeRingtone = null
-            val response = JSObject()
-            response.put("stopped", true)
-            call.resolve(response)
-        } catch (e: Exception) {
-            call.reject("Failed to stop hardware siren", e)
-        }
+        HardwareAlarm.stop()
+        val response = JSObject()
+        response.put("stopped", true)
+        call.resolve(response)
     }
 
     private fun readSimSerial(): String? {
@@ -364,12 +396,29 @@ class TrackdBridgePlugin : Plugin() {
     }
 
     private fun isDecoyServiceEnabled(): Boolean {
-        val expected = "${context.packageName}/${AppDecoyAccessibilityService::class.java.name}"
+        try {
+            val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? android.view.accessibility.AccessibilityManager
+            val runningList = am?.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            if (runningList != null) {
+                for (service in runningList) {
+                    if (service.resolveInfo?.serviceInfo?.packageName == context.packageName) {
+                        return true
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        val expectedFull = "${context.packageName}/${AppDecoyAccessibilityService::class.java.name}"
+        val expectedShort = "${context.packageName}/.${AppDecoyAccessibilityService::class.java.simpleName}"
         val enabled = Settings.Secure.getString(
             context.contentResolver,
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
-        return enabled.split(':').any { it.equals(expected, ignoreCase = true) }
+        return enabled.split(':').any { 
+            it.equals(expectedFull, ignoreCase = true) || 
+            it.equals(expectedShort, ignoreCase = true) ||
+            it.contains(context.packageName, ignoreCase = true)
+        }
     }
 
     private fun adminComponent(): ComponentName =

@@ -24,12 +24,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   
-  // Offline credentials state
+  // Real hardware & credentials state
   const [pin, setPin] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [saved, setSaved] = useState(false);
   const [sirenPlaying, setSirenPlaying] = useState(false);
-  const [batteryLevel, setBatteryLevel] = useState(94);
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
+  const [deviceName, setDeviceName] = useState('Android Sentinel');
+  const [hasPinConfigured, setHasPinConfigured] = useState(false);
 
   // Web sync & account link state
   const [linkState, setLinkState] = useState<LinkState>({
@@ -41,41 +43,77 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [deviceNameInput, setDeviceNameInput] = useState('Redmi Note 14 Pro');
+  const [deviceNameInput, setDeviceNameInput] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccessMsg, setLinkSuccessMsg] = useState<string | null>(null);
 
   const [perms, setPerms] = useState({
-    location: true,
-    sms: true,
-    admin: true,
-    battery: true,
-    overlay: true,
-    accessibility: true,
+    location: false,
+    sms: false,
+    admin: false,
+    battery: false,
+    overlay: false,
+    accessibility: false,
   });
 
   const checkStatus = async () => {
     setLoading(true);
     try {
-      const [adminRes, permRes, accessRes, battRes, linkRes] = await Promise.all([
-        TrackdBridge.isDeviceAdminActive().catch(() => ({ active: false })),
+      const [deviceStatus, permRes, battRes, linkRes] = await Promise.all([
+        TrackdBridge.getDeviceStatus().catch(() => null),
         TrackdBridge.checkPermissions({ permissions: ['location', 'sms'] }).catch(() => null),
-        TrackdBridge.checkAccessibilityPermission().catch(() => ({ enabled: false })),
         TrackdBridge.isBatteryOptimizationIgnored().catch(() => ({ ignored: false })),
         TrackdBridge.getLinkState().catch(() => ({ configured: false, deviceId: null, uid: null, email: null })),
       ]);
 
-      const pMap = (permRes?.permissions ?? {}) as Record<string, string>;
+      const rawPermMap = (permRes as unknown as Record<string, string>) ?? {};
+      const nestedPermMap = (permRes?.permissions ?? {}) as Record<string, string>;
+
+      const isLocGranted = Boolean(
+        deviceStatus?.locationGranted ||
+        rawPermMap['location'] === 'granted' ||
+        nestedPermMap['location'] === 'granted'
+      );
+      const isSmsGranted = Boolean(
+        deviceStatus?.smsGranted ||
+        rawPermMap['sms'] === 'granted' ||
+        nestedPermMap['sms'] === 'granted'
+      );
+      const isAdminActive = Boolean(deviceStatus?.deviceAdminActive);
+      const isBattIgnored = Boolean(
+        deviceStatus?.batteryOptimizationIgnored || 
+        battRes?.ignored
+      );
+      const isOverlayActive = Boolean(deviceStatus?.overlayEnabled);
+      const isAccessActive = Boolean(deviceStatus?.accessibilityEnabled);
 
       setPerms({
-        location: pMap['location'] === 'granted',
-        sms: pMap['sms'] === 'granted',
-        admin: Boolean(adminRes?.active),
-        battery: Boolean(battRes?.ignored),
-        overlay: true,
-        accessibility: Boolean(accessRes?.enabled),
+        location: isLocGranted,
+        sms: isSmsGranted,
+        admin: isAdminActive,
+        battery: isBattIgnored,
+        overlay: isOverlayActive,
+        accessibility: isAccessActive,
       });
+
+      if (deviceStatus) {
+        if (typeof deviceStatus.batteryLevel === 'number' && deviceStatus.batteryLevel >= 0) {
+          setBatteryLevel(deviceStatus.batteryLevel);
+        }
+        if (deviceStatus.deviceModel) {
+          const brand = deviceStatus.deviceBrand || deviceStatus.deviceManufacturer || '';
+          const full = brand ? `${brand} ${deviceStatus.deviceModel}` : deviceStatus.deviceModel;
+          setDeviceName(full);
+          setDeviceNameInput((prev) => prev || full);
+        }
+        if (deviceStatus.hasPinConfigured) {
+          setHasPinConfigured(true);
+        }
+        if (deviceStatus.emergencyContact) {
+          setEmergencyPhone(deviceStatus.emergencyContact);
+        }
+      }
 
       if (linkRes) {
         setLinkState(linkRes);
@@ -90,7 +128,23 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   useEffect(() => {
     checkStatus();
 
-    // Query real battery if supported
+    // Auto-refresh instantly whenever user switches back from Android Settings
+    const handleResume = () => {
+      checkStatus();
+    };
+
+    window.addEventListener('focus', handleResume);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Periodic check every 4 seconds for live battery and sync changes
+    const pollTimer = setInterval(checkStatus, 4000);
+
+    // Query real browser battery as fallback if running in dev preview
     if ('getBattery' in navigator) {
       (navigator as unknown as { getBattery: () => Promise<{ level: number }> })
         .getBattery()
@@ -98,11 +152,20 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         .catch(() => undefined);
     }
 
-    // Load saved PIN and emergency phone if cached
+    // Load saved PIN and emergency phone from local cache
     const cachedPin = localStorage.getItem('trackd_pin');
     const cachedPhone = localStorage.getItem('trackd_emergency_phone');
-    if (cachedPin) setPin(cachedPin);
+    if (cachedPin) {
+      setPin(cachedPin);
+      setHasPinConfigured(true);
+    }
     if (cachedPhone) setEmergencyPhone(cachedPhone);
+
+    return () => {
+      window.removeEventListener('focus', handleResume);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(pollTimer);
+    };
   }, []);
 
   const totalSteps = 6;
@@ -111,7 +174,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
   const handleSavePin = async () => {
     if (pin.length < 4) {
-      alert('Enter at least 4 digits for recovery PIN');
+      alert('Enter at least 4 digits for Master PIN');
       return;
     }
     try {
@@ -119,10 +182,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         phone: emergencyPhone,
         pin: pin,
       });
+      localStorage.setItem('trackd_pin', pin);
+      localStorage.setItem('trackd_emergency_phone', emergencyPhone);
+      setHasPinConfigured(true);
       setSaved(true);
       setTimeout(() => {
         setSaved(false);
         setPinModalOpen(false);
+        checkStatus();
       }, 1000);
     } catch (e) {
       alert('Save failed: ' + e);
@@ -131,12 +198,21 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
   const handleToggleSiren = async () => {
     if (sirenPlaying) {
-      await TrackdBridge.stopHardwareSiren();
+      try {
+        await TrackdBridge.stopHardwareSiren();
+      } catch (e) {
+        console.error('Stop siren error', e);
+      }
       setSirenPlaying(false);
     } else {
       setSirenPlaying(true);
-      await TrackdBridge.testHardwareSiren({ durationMs: 4000 });
-      setTimeout(() => setSirenPlaying(false), 4000);
+      try {
+        await TrackdBridge.testHardwareSiren({ durationMs: 4000 });
+      } catch (e) {
+        console.error('Play siren error', e);
+      } finally {
+        setTimeout(() => setSirenPlaying(false), 4000);
+      }
     }
   };
 
@@ -168,8 +244,8 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       let targetDeviceId = '';
       if (isConfigured && uid) {
         targetDeviceId = await createDevice(uid, {
-          deviceName: deviceNameInput.trim() || 'Redmi Note 14 Pro',
-          deviceModel: 'Xiaomi 24090RA29G',
+          deviceName: deviceNameInput.trim() || deviceName,
+          deviceModel: deviceName,
         });
       } else {
         targetDeviceId = 'dev_' + Math.random().toString(36).substring(2, 9);
@@ -235,7 +311,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen px-4.5 pt-3.5 pb-4 max-w-sm mx-auto justify-between bg-[#080B11] text-slate-100 select-none overflow-hidden font-sans">
+    <div className="flex flex-col h-screen max-h-screen px-4 pt-3 pb-4 max-w-sm mx-auto justify-between bg-[#080B11] text-slate-100 select-none overflow-hidden font-sans">
       
       {/* 1. Top Header Bar */}
       <header className="flex items-center justify-between py-1 shrink-0">
@@ -256,7 +332,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               TRACKD SHIELD
             </h1>
             <div className="flex items-center gap-1.5 mt-1 font-mono text-[11px] text-slate-400">
-              <span>Redmi Note 14 Pro</span>
+              <span className="truncate max-w-[130px]">{deviceName}</span>
               <span className="text-slate-600">•</span>
               <span className={`font-bold tracking-wide ${
                 isArmed ? 'text-[#00E699]' : 'text-amber-400'
@@ -277,15 +353,24 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         </button>
       </header>
 
-      {/* 2. Center Dial & Telemetry Status */}
-      <div className="py-1 flex flex-col items-center text-center shrink-0">
+      {/* 2. Center Dial & Telemetry Status (Properly Sized, Zero Overlap) */}
+      <div className="py-2 flex flex-col items-center text-center shrink-0">
         {/* Glowing Dial Ring */}
-        <div className="relative flex items-center justify-center my-1">
-          <div className="w-26 h-26 rounded-full border-[3.5px] border-[#00E699] bg-[#07241C]/40 flex flex-col items-center justify-center shadow-[0_0_24px_rgba(0,230,153,0.3)] transition-all duration-300">
-            <span className="text-2xl font-black text-white leading-none tracking-tight">
+        <div className="relative flex items-center justify-center my-2">
+          <div 
+            style={{ width: '114px', height: '114px' }}
+            className={`rounded-full border-[3.5px] flex flex-col items-center justify-center transition-all duration-300 ${
+              isArmed 
+                ? 'border-[#00E699] bg-[#07241C]/50 shadow-[0_0_26px_rgba(0,230,153,0.35)]' 
+                : 'border-amber-500 bg-amber-500/10 shadow-[0_0_24px_rgba(245,158,11,0.25)]'
+            }`}
+          >
+            <span className="text-3xl font-black text-white leading-none tracking-tight">
               {activeSteps}/{totalSteps}
             </span>
-            <span className="text-[9px] font-black uppercase tracking-widest text-[#00E699] mt-0.5">
+            <span className={`text-[10px] font-black uppercase tracking-widest mt-1.5 ${
+              isArmed ? 'text-[#00E699]' : 'text-amber-400'
+            }`}>
               {isArmed ? 'ARMED' : 'ACTION'}
             </span>
           </div>
@@ -297,21 +382,44 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         </h2>
         
         {/* Telemetry Chips */}
-        <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-2 mt-2">
+          {/* Real Hardware Battery */}
           <span className="px-3 py-1 rounded-full bg-[#111724] border border-[#1A2335] text-[11px] text-white font-medium flex items-center gap-1.5">
             <span>🔋</span>
-            <span>{batteryLevel}%</span>
+            <span>{batteryLevel !== null ? `${batteryLevel}%` : 'Reading...'}</span>
           </span>
 
-          <span className="px-3 py-1 rounded-full bg-[#111724] border border-[#1A2335] text-[11px] text-[#00E699] font-medium flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#00E699]" />
-            <span>SMS Ready</span>
-          </span>
+          {/* Real SMS System State */}
+          <button
+            onClick={async () => {
+              if (!perms.sms) {
+                try {
+                  const res = await TrackdBridge.requestPermissions({ permissions: ['sms'] }).catch(() => null);
+                  const isGranted = (res as unknown as Record<string, string>)?.['sms'] === 'granted';
+                  if (!isGranted) {
+                    await TrackdBridge.openAppSettings().catch(() => null);
+                  }
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setTimeout(checkStatus, 600);
+                }
+              }
+            }}
+            className={`px-3 py-1 rounded-full bg-[#111724] border text-[11px] font-medium flex items-center gap-1.5 transition active:scale-95 ${
+              perms.sms 
+                ? 'border-[#1A2335] text-[#00E699]' 
+                : 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10 cursor-pointer'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${perms.sms ? 'bg-[#00E699]' : 'bg-amber-400 animate-ping'}`} />
+            <span>{perms.sms ? 'SMS Ready' : 'Enable SMS'}</span>
+          </button>
 
           {linkState.configured ? (
             <button
               onClick={() => setAccountModalOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-[#07241C] border border-[#10563E] text-[11px] text-[#00E699] font-medium flex items-center gap-1.5 hover:bg-[#0A3328] active:scale-95 transition"
+              className="px-3 py-1 rounded-full bg-[#07241C] border border-[#10563E] text-[11px] text-[#00E699] font-medium flex items-center gap-1.5 hover:bg-[#0A3328] active:scale-95 transition"
             >
               <Radio className="w-2.5 h-2.5 text-[#00E699] animate-pulse" />
               <span>Web Synced</span>
@@ -319,7 +427,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           ) : (
             <button
               onClick={() => setAccountModalOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 font-medium flex items-center gap-1 hover:bg-amber-500/20 active:scale-95 transition animate-pulse"
+              className="px-3 py-1 rounded-full bg-transparent border border-amber-500/30 text-[11px] text-amber-300 font-medium flex items-center gap-1 hover:bg-amber-500/10 active:scale-95 transition"
             >
               <Link2 className="w-2.5 h-2.5 text-amber-400" />
               <span>Link Web</span>
@@ -336,13 +444,25 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               key: 'location', 
               label: 'Always-On Location', 
               icon: MapPin, 
-              act: () => TrackdBridge.requestPermissions({ permissions: ['location'] }) 
+              act: async () => {
+                const res = await TrackdBridge.requestPermissions({ permissions: ['location'] }).catch(() => null);
+                const isGranted = (res as unknown as Record<string, string>)?.['location'] === 'granted';
+                if (!isGranted) {
+                  await TrackdBridge.openAppSettings().catch(() => null);
+                }
+              }
             },
             { 
               key: 'sms', 
               label: 'Offline SMS Tracking', 
               icon: MessageSquare, 
-              act: () => TrackdBridge.requestPermissions({ permissions: ['sms'] }) 
+              act: async () => {
+                const res = await TrackdBridge.requestPermissions({ permissions: ['sms'] }).catch(() => null);
+                const isGranted = (res as unknown as Record<string, string>)?.['sms'] === 'granted';
+                if (!isGranted) {
+                  await TrackdBridge.openAppSettings().catch(() => null);
+                }
+              }
             },
             { 
               key: 'admin', 
@@ -373,8 +493,19 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             return (
               <div 
                 key={item.key}
-                onClick={() => !isDone && item.act()}
-                className={`px-4 py-3 flex items-center justify-between transition ${
+                onClick={async () => {
+                  if (!isDone) {
+                    try {
+                      await item.act();
+                    } catch (e) {
+                      console.warn('Action failed:', e);
+                    } finally {
+                      setTimeout(checkStatus, 600);
+                      setTimeout(checkStatus, 1500);
+                    }
+                  }
+                }}
+                className={`px-4 py-3.5 flex items-center justify-between transition ${
                   isDone 
                     ? 'bg-transparent' 
                     : 'bg-amber-500/[0.04] hover:bg-amber-500/[0.08] cursor-pointer'
@@ -390,7 +521,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 {isDone ? (
                   <CheckCircle2 className="w-4.5 h-4.5 text-[#00E699]" />
                 ) : (
-                  <span className="text-[9px] font-extrabold text-amber-400 uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 cursor-pointer">
+                  <span className="text-[9px] font-extrabold text-amber-400 uppercase tracking-wide px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 cursor-pointer">
                     Enable
                   </span>
                 )}
@@ -405,9 +536,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         {/* Offline PIN & Trusted Phone Card */}
         <div 
           onClick={() => setPinModalOpen(true)}
-          className="rounded-2xl bg-[#0C121E] border border-[#172235] px-3.5 py-2.5 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#0F1626] transition shadow-md"
+          className="rounded-2xl bg-[#0C121E] border border-[#172235] px-4 py-3 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#0F1626] transition shadow-md"
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div className="w-7 h-7 rounded-lg bg-[#271F0F] border border-[#443314] flex items-center justify-center text-amber-400">
               <Key className="w-3.5 h-3.5" />
             </div>
@@ -417,8 +548,12 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="px-2 py-0.5 rounded bg-[#092B20] border border-[#10563E] text-[10px] font-extrabold uppercase tracking-wider text-[#00E699]">
-              {pin ? 'SET' : 'SETUP'}
+            <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+              hasPinConfigured || pin 
+                ? 'bg-[#092B20] border border-[#10563E] text-[#00E699]' 
+                : 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+            }`}>
+              {hasPinConfigured || pin ? 'SET' : 'SETUP'}
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
           </div>
@@ -599,7 +734,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             </div>
 
             <div>
-              <label className="text-[10px] text-slate-400 block mb-1">4-Digit Master PIN</label>
+              <label className="text-[10px] text-slate-400 block mb-1">4-Digit Master Recovery PIN</label>
               <input 
                 type="password"
                 maxLength={4}
@@ -611,7 +746,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             </div>
 
             <div>
-              <label className="text-[10px] text-slate-400 block mb-1">Trusted Recovery Number</label>
+              <label className="text-[10px] text-slate-400 block mb-1">Trusted Emergency Phone Number</label>
               <input 
                 type="tel"
                 value={emergencyPhone}

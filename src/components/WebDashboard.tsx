@@ -189,14 +189,15 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
         await wakeDevice(selectedDevice.id, 'LOCATE');
         setActionNotice('Live GPS coordinates requested from handset.');
       } else if (action === 'SIREN') {
+        await updateDevice(selectedDevice.id, { requestSiren: true, stopSiren: false });
         await wakeDevice(selectedDevice.id, 'SIREN');
-        setActionNotice('Max-volume emergency hardware siren triggered.');
+        setActionNotice('Max-volume emergency hardware siren triggered on handset.');
       } else if (action === 'STOLEN') {
         await updateDevice(selectedDevice.id, { isStolen: true });
         await wakeDevice(selectedDevice.id, 'STOLEN');
         setActionNotice('Theft Mode ARMED. Anti-theft screen overlay engaged.');
       } else if (action === 'SAFE') {
-        await updateDevice(selectedDevice.id, { isStolen: false });
+        await updateDevice(selectedDevice.id, { isStolen: false, stopSiren: true, requestSiren: false });
         await wakeDevice(selectedDevice.id, 'SAFE');
         setActionNotice('Device marked SAFE. Theft protection mode disarmed.');
       } else if (action === 'WIPE') {

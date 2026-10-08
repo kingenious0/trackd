@@ -36,6 +36,14 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
         when (command.first) {
             "LOCATE" -> handleLocate(context, sender)
+            "SIREN" -> {
+                HardwareAlarm.play(context, 30000L)
+                reply(context, sender, "Trackd: High-decibel emergency siren activated.")
+            }
+            "STOP_SIREN", "SILENCE" -> {
+                HardwareAlarm.stop()
+                reply(context, sender, "Trackd: Emergency siren silenced.")
+            }
             "STOLEN" -> {
                 AegisState.setStolen(context, true)
                 FirestoreSync.pushStolen(context, true)

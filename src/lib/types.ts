@@ -37,6 +37,8 @@ export interface Device {
   isStolen: boolean;
   requestLocate: boolean;
   requestWipe?: boolean;
+  requestSiren?: boolean;
+  stopSiren?: boolean;
   lastSeenAt: string;
   lastTelemetry?: TelemetrySnapshot;
   battery?: number;
@@ -56,6 +58,8 @@ export interface TelemetryLog {
 
 export const SMS_COMMANDS = [
   { command: "#LOCATE", purpose: "Device replies with live GPS coordinates via SMS" },
+  { command: "#SIREN", purpose: "Triggers 100% max-volume emergency acoustic siren" },
+  { command: "#SILENCE", purpose: "Silences the emergency acoustic siren" },
   { command: "#STOLEN", purpose: "Arms the financial decoy and theft mode" },
   { command: "#SAFE", purpose: "Disarms theft mode and restores normal use" },
   { command: "#WIPE", purpose: "Factory resets the device immediately" }
