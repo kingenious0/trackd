@@ -32,9 +32,7 @@ async function postApi<T>(path: string, body: unknown): Promise<T> {
       body: JSON.stringify(body)
     });
   } catch {
-    throw new Error(
-      "API backend unreachable — deploy the /api routes (Vercel) and set SAILUP_API_KEY."
-    );
+    throw new Error("We couldn't reach the verification service. Please try again later.");
   }
   const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) {
@@ -196,8 +194,8 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
         <div className="panel space-y-4 p-6">
           {backendSlow && (
             <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-warning">
-              Still trying to reach Firebase — check your connection. You can keep waiting; this
-              page will update automatically once Auth responds.
+              Still connecting — check your internet. You can keep waiting; this page will
+              update automatically.
             </p>
           )}
           <div className="grid grid-cols-2 gap-1 rounded-full bg-raised p-1">
@@ -436,17 +434,13 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
                     Create protected account
                   </button>
                   <p className="text-center text-[11px] leading-relaxed text-muted">
-                    Your PIN is stored only as a SHA-256 hash. SMS commands use it as{" "}
-                    <span className="font-mono">#CMD#[PIN]</span>.
+                    Keep your PIN safe — you'll need it for SMS commands like{" "}
+                    <span className="font-mono">#CMD#[PIN]</span>. It's never displayed again.
                   </p>
                 </form>
               )}
             </div>
           )}
-
-          <p className="text-center text-[11px] leading-relaxed text-muted">
-            Runs on Firebase Spark (free). SMS codes via Sailup.io sender TRACKD.
-          </p>
         </div>
       </div>
     </div>
@@ -520,6 +514,7 @@ function friendlyError(err: unknown): string {
     case "auth/network-request-failed":
       return "Network error — check your connection.";
     default:
-      return err instanceof Error ? err.message : "Authentication failed";
+      console.error(err);
+      return "Something went wrong. Please try again.";
   }
 }

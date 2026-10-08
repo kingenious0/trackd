@@ -13,12 +13,11 @@ function SetupNotice({ onDemo }: { onDemo: () => void }) {
       <div className="panel w-full max-w-lg border-warning/40 p-6">
         <div className="mb-3 flex items-center gap-3">
           <TriangleAlert className="h-6 w-6 text-warning" />
-          <h1 className="text-lg font-semibold">Firebase not configured</h1>
+          <h1 className="text-lg font-semibold">Configuration required</h1>
         </div>
         <p className="mb-4 text-sm leading-relaxed text-muted">
           The app loaded, but <code className="font-mono text-warning">.env</code> still has
-          placeholder values. Paste your Firebase web app credentials, then Vite restarts and the
-          console appears.
+          placeholder values. Paste your credentials, then Vite restarts and the console appears.
         </p>
         <pre className="overflow-x-auto rounded-xl border border-line bg-raised p-3 font-mono text-xs">
 {`VITE_FIREBASE_API_KEY=<web API key>
@@ -28,10 +27,6 @@ VITE_FIREBASE_STORAGE_BUCKET=<project>.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=<sender id>
 VITE_FIREBASE_APP_ID=<1:sender:web:app id>`}
         </pre>
-        <p className="mt-4 text-xs text-muted">
-          Firebase console → Project settings → Your apps → Web app (SDK setup and configuration).
-          Runs entirely on the free Spark plan.
-        </p>
 
         <button className="btn-solid mt-5 w-full" onClick={onDemo}>
           <MonitorPlay className="h-4 w-4" />
@@ -74,11 +69,13 @@ export default function App() {
       auth(),
       (next) => {
         window.clearTimeout(timer);
+        setSlowBoot(false);
         setUser(next);
         setBooting(false);
       },
       () => {
         window.clearTimeout(timer);
+        setSlowBoot(false);
         setBooting(false);
       }
     );

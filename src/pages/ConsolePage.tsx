@@ -243,7 +243,7 @@ export default function ConsolePage({ user, demo = false, onExitDemo }: Props) {
               <TriangleAlert className="h-3.5 w-3.5" />
               Works offline via SMS fallback
             </span>
-            <span>Trackd · Spark plan</span>
+            <span>Trackd</span>
           </footer>
         </div>
       </aside>
