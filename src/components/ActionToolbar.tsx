@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Crosshair, Loader2, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { Device, RemoteCommand } from "../lib/types";
+import { apiUrl } from "../lib/api";
 import WipeDialog from "./WipeDialog";
 
 interface Props {
@@ -24,7 +25,7 @@ export default function ActionToolbar({ device, onCommand, demo = false }: Props
       if (!demo) {
         // Silent FCM ping so a dozing phone wakes and its listener fires.
         // Firestore flags remain the authoritative command channel.
-        fetch("/api/admin/wake-device", {
+        fetch(apiUrl("/api/admin/wake-device"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId: device.id, action: command })

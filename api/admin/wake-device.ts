@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getMessaging } from "firebase-admin/messaging";
 import { adminApp, adminDb } from "../_lib/admin.js";
+import { handleCors } from "../_lib/cors.js";
 
 const ACTIONS = new Set(["LOCATE", "STOLEN", "SAFE", "WIPE"]);
 
@@ -12,6 +13,8 @@ const ACTIONS = new Set(["LOCATE", "STOLEN", "SAFE", "WIPE"]);
  * that wakes a dozing phone so its snapshot listener fires promptly.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
+
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }

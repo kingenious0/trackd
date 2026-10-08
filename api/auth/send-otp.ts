@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
 import { adminDb } from "../_lib/admin.js";
+import { handleCors } from "../_lib/cors.js";
 
 const E164 = /^\+\d{7,15}$/;
 const OTP_TTL_MS = 5 * 60 * 1000;
@@ -12,6 +13,8 @@ const RESEND_COOLDOWN_MS = 60 * 1000;
  * (otps/{phoneNumber}, 5-minute TTL), and dispatches it via Sailup.io.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
+
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }

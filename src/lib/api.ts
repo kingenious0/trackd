@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import {
   addDoc,
   collection,
@@ -27,6 +28,15 @@ import {
 const USERS = "users";
 const DEVICES = "devices";
 const LOGS = "telemetry_logs";
+
+const API_ORIGIN = Capacitor.isNativePlatform()
+  ? ((import.meta.env.VITE_API_ORIGIN as string | undefined) ??
+    "https://trackd-livid.vercel.app")
+  : "";
+
+export function apiUrl(path: string): string {
+  return `${API_ORIGIN}${path}`;
+}
 
 function toIso(value: unknown): string {
   if (value && typeof value === "object" && "toDate" in value) {

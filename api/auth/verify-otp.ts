@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "node:crypto";
 import { adminDb } from "../_lib/admin.js";
+import { handleCors } from "../_lib/cors.js";
 
 const MAX_ATTEMPTS = 5;
 
@@ -10,6 +11,8 @@ const MAX_ATTEMPTS = 5;
  * consumed (deleted) and a one-time verification session token is returned.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
+
   if (req.method !== "POST") {
     return res.status(405).json({ verified: false, error: "Method not allowed" });
   }

@@ -5,7 +5,7 @@ import {
   updateProfile
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { saveProfile } from "../lib/api";
+import { saveProfile, apiUrl } from "../lib/api";
 import { sha256Hex, toUnsignedE164 } from "../lib/crypto";
 import {
   CheckCircle2,
@@ -26,7 +26,7 @@ type Mode = "signin" | "signup";
 async function postApi<T>(path: string, body: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(apiUrl(path), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
@@ -97,7 +97,7 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
       const result = await postApi<{ success: boolean; messageId: string }>("/api/auth/send-otp", {
         phoneNumber: e164
       });
-      if (!result.success) throw new Error("SMS gateway rejected the request.");
+      if (!result.success) throw new Error("We couldn't start verification. Please try again.");
       setNotice(`Code sent to ${e164}. It expires in 5 minutes.`);
       setStep(2);
     } catch (err) {
