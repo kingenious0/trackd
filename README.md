@@ -169,49 +169,92 @@ graph TD
 
 ---
 
-## 📱 Mobile Sentinel UI (Zero-Scroll Ergonomics)
+## 📱 Mobile Sentinel UI (4-State Native Security Model)
 
-The native Android APK (`com.trackd.app`) features a cybernetic status hub designed for zero vertical scroll:
+The native Android APK (`com.trackd.app`) implements a robust 4-state lifecycle modeled after Google Play Protect and Pixel Security Center, strictly engineered to fit within `100dvh` (zero vertical scroll):
+
+### 1. The 4 Security States
+
+```
+                 +-----------------------------+
+                 |       1. SETUP STATE        |
+                 |  (Step-by-Step Onboarding)  |
+                 +--------------+--------------+
+                                |
+                                v
+                 +-----------------------------+
+                 |       Account Linked        |
+                 +--------------+--------------+
+                                |
+             +------------------+------------------+
+             |                                     |
+   (6/6 Perms Active)                    (< 6 Perms Active)
+             |                                     |
+             v                                     v
++-----------------------------+       +-----------------------------+
+|       2. ARMED STATE        |       |      3. DEGRADED STATE      |
+|  - Emerald 6/6 Glow Dial    | <---> |  - Amber Progress Arc       |
+|  - "Device is Protected"    |       |  - Missing items float top  |
+|  - PIN-Gated Settings Row   |       |  - "Finish setup" CTA       |
+|  - Neon Siren Test Pill     |       |                             |
++--------------+--------------+       +--------------+--------------+
+               |                                     |
+               +------------------+------------------+
+                                  |
+                        (Device Marked Stolen)
+                                  |
+                                  v
+                    +-----------------------------+
+                    |       4. STOLEN STATE       |
+                    |  - Crimson Emergency Beacon |
+                    |  - Live GPS Stream to Web   |
+                    |  - Financial App Decoy Trap |
+                    |  - Owner PIN Unlock Gate    |
+                    +-----------------------------+
+```
+
+### ASCII Layout (Armed & Degraded View)
 
 ```
 +-------------------------------------------------------+
-|  [🛡️]  TRACKD SHIELD                                  |
-|        Redmi 24090RA29G • ARMED                 [🔄]  |
+|  [🛡️]  Trackd                     Redmi • Guarded [🔄]|
 |                                                       |
 |                     .--------.                        |
 |                    /   6/6    \                       |
-|                   |   ARMED    |                      |
+|                   |  PROTECTED |                      |
 |                    \          /                       |
 |                     '--------'                        |
-|                 Device is Protected                   |
+|                   Fully protected                     |
 |                                                       |
-|    [ 🔋 78% ]     [ • SMS Ready ]     [ 📶 Web Synced ]|
+|          [ 🔋 Battery 77% ]     [ ● SMS ready ]       |
 |                                                       |
+|  PROTECTION                              ((•)) Live Synced
 |  +-------------------------------------------------+  |
-|  | [📍] Always-On Location                     [✓] |  |
-|  | [💬] Offline SMS Tracking                   [✓] |  |
-|  | [🔒] Remote Lock & Wipe                     [✓] |  |
-|  | [⚡] Background Battery Pass                [✓] |  |
-|  | [👁️] Lockscreen Message Alert               [✓] |  |
-|  | [⚠️] Anti-Power-Off Decoy                   [✓] |  |
-|  +-------------------------------------------------+  |
-|                                                       |
-|  +-------------------------------------------------+  |
-|  | [🔑] Offline PIN & Trusted Phone    [ SET ] [>] |  |
+|  | [📍] Always-on location                     [✓] |  |
+|  | [💬] Find phone offline                     [✓] |  |
+|  | [🔒] Remote lock and erase                  [✓] |  |
+|  | [⚡] Keep app running                       [✓] |  |
+|  | [⚠️] Prevent power off                      [✓] |  |
+|  | [👁️] Lock screen message                   [✓] |  |
 |  +-------------------------------------------------+  |
 |                                                       |
-|  [         🔊 TEST LOUD ALARM (NEON PILL)         ]  |
+|  +-------------------------------------------------+  |
+|  | [🔑] Offline PIN & contact   Locked • Needs PIN [>] |
+|  +-------------------------------------------------+  |
+|                                                       |
+|  [         🔊 TEST LOUD SIREN (EMERALD PILL)       ]  |
 +-------------------------------------------------------+
 ```
 
-| Component | Functionality |
+| UI Element | Functionality & Real Hardware Integration |
 | :--- | :--- |
-| **Header Status Bar** | Shows device model (e.g., `Redmi 24090RA29G`) queried live from `android.os.Build` and armed state (`ARMED` in emerald, `ACTION` in amber). |
-| **Glowing Status Dial** | Circular dial displaying protection coverage (e.g., `6/6 ARMED`). Perfectly centered with zero text clipping. |
-| **Real Telemetry Chips** | **100% Real Hardware Data**: Real battery percentage via Android `BatteryManager`, real SMS engine readiness, and live Web Sync indicator. |
-| **Grouped Permission Checklist** | Interactive single-tap activation for Location, SMS, Device Admin, Battery Optimization, Overlay Alert, and Accessibility Decoy. Automatically updates on return from Android Settings. |
-| **Offline PIN & Recovery Card** | Quick setup sheet to configure the 4-digit Master Recovery PIN and trusted emergency phone number. |
-| **Test Loud Alarm Button** | Full-width neon pill button that triggers full-volume acoustic siren testing with 4-second safety auto-reset. |
+| **Top Header Bar** | Minimal obsidian bar displaying "Trackd" shield and live hardware model (`Build.MODEL`) with real-time state badge (`Guarded` in emerald or `Partly guarded` in amber). |
+| **Central Hero Dial** | Dynamic SVG progress ring. Displays emerald ring at 6/6 coverage, or amber segmented arc when degraded. |
+| **Hardware Telemetry Pills** | **100% Real OS Ground Truth**: Live battery reading via `BatteryManager`, real telephony SMS provider status, and live Firestore sync status. |
+| **Dynamic Inset Checklist** | Grouped card of 6 native protections. In `degraded` mode, ungranted permissions float to the top with a blue "Set up >" button. |
+| **Master PIN Keypad Gate** | Sleek slide-up numeric bottom sheet (1–9, fingerprint, 0, backspace, 4 dots) requiring Master PIN before revealing emergency credentials. |
+| **Step-by-Step Onboarding** | Step 1 (Firebase Auth), Step 2 (Device naming), Step 3 (Master PIN), Step 4 (Trusted phone), and Steps 5–6 (Progressive permission elevation). |
+| **Test Loud Siren** | Vibrates phone with `@capacitor/haptics`, sounds 100% max volume alarm via `HardwareAlarm.kt`, and auto-stops after 5 seconds. |
 
 ---
 
