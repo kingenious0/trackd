@@ -1,4 +1,13 @@
-export type TriggerReason = "SHUTDOWN" | "SIM_CHANGE" | "SMS_COMMAND" | "LOCATE_REQUEST";
+export type TriggerReason =
+  | "SHUTDOWN"
+  | "SIM_CHANGE"
+  | "SMS_COMMAND"
+  | "LOCATE_REQUEST"
+  | "FCM_WAKE"
+  | "APP_LINKED"
+  | "APP_START"
+  | "PERIODIC"
+  | "BOOT";
 export type RemoteCommand = "STOLEN" | "SAFE" | "LOCATE" | "WIPE";
 
 export interface UserProfile {
@@ -30,6 +39,7 @@ export interface Device {
   requestWipe?: boolean;
   lastSeenAt: string;
   lastTelemetry?: TelemetrySnapshot;
+  battery?: number;
 }
 
 export interface TelemetryLog {

@@ -17,7 +17,9 @@ class SimStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            "android.intent.action.LOCKED_BOOT_COMPLETED",
+            "android.intent.action.LOCKED_BOOT_COMPLETED" -> {
+                TelemetryDispatcher.sendNow(context, "BOOT")
+            }
             "android.intent.action.SIM_STATE_CHANGED" -> Unit
             else -> return
         }

@@ -37,10 +37,6 @@ object FirestoreSync {
             Log.w(TAG, "device or user not configured; telemetry skipped")
             return false
         }
-        if (lat == null || lng == null) {
-            Log.w(TAG, "no GPS fix for $reason; telemetry skipped")
-            return false
-        }
         if (FirebaseAuth.getInstance().currentUser == null) {
             Log.w(TAG, "not signed in; telemetry skipped")
             return false
@@ -52,34 +48,44 @@ object FirestoreSync {
 
         return try {
             val db = FirebaseFirestore.getInstance()
-            val logEntry = hashMapOf(
-                "deviceId" to deviceId,
-                "userId" to userId,
-                "lat" to lat,
-                "lng" to lng,
-                "accuracy" to accuracyValue,
-                "battery" to battery,
-                "triggerReason" to reason,
-                "timestamp" to timestamp
-            )
-            Tasks.await(db.collection("telemetry_logs").add(logEntry), 6, TimeUnit.SECONDS)
+
+            if (lat != null && lng != null) {
+                val logEntry = hashMapOf(
+                    "deviceId" to deviceId,
+                    "userId" to userId,
+                    "lat" to lat,
+                    "lng" to lng,
+                    "accuracy" to accuracyValue,
+                    "battery" to battery,
+                    "triggerReason" to reason,
+                    "timestamp" to timestamp
+                )
+                Tasks.await(db.collection("telemetry_logs").add(logEntry), 6, TimeUnit.SECONDS)
+            }
 
             val deviceUpdate = hashMapOf<String, Any>(
                 "lastSeenAt" to timestamp,
-                "lastTelemetry" to hashMapOf(
+                "battery" to battery
+            )
+            if (lat != null && lng != null) {
+                deviceUpdate["lastTelemetry"] = hashMapOf(
                     "lat" to lat,
                     "lng" to lng,
                     "accuracy" to accuracyValue,
                     "battery" to battery,
                     "trigger" to reason
                 )
-            )
+            }
             Tasks.await(
                 db.collection("devices").document(deviceId).update(deviceUpdate),
                 6,
                 TimeUnit.SECONDS
             )
-            Log.i(TAG, "telemetry written ($reason)")
+            Log.i(
+                TAG,
+                if (lat != null && lng != null) "telemetry written ($reason)"
+                else "heartbeat written without fix ($reason)"
+            )
             true
         } catch (error: Throwable) {
             Log.w(TAG, "telemetry write failed", error)

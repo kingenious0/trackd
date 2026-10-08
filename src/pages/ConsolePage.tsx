@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { signOut } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
 import { Crosshair, LogOut, MonitorPlay, Radio, TriangleAlert } from "lucide-react";
 import { auth } from "../lib/firebase";
 import { subscribeDevices, subscribeTelemetry, updateDevice } from "../lib/api";
@@ -20,6 +21,7 @@ import MapPanel from "../components/MapPanel";
 import CheatSheet from "../components/CheatSheet";
 import DeviceOnboarding from "../components/DeviceOnboarding";
 import PermissionChecklist from "../components/PermissionChecklist";
+import MobileConsole from "../components/MobileConsole";
 
 interface Props {
   user?: User;
@@ -39,6 +41,7 @@ export default function ConsolePage({ user, demo = false, onExitDemo }: Props) {
 
   const uid = demo ? DEMO_USER_ID : (user?.uid ?? "");
   const email = demo ? "demo@trackd.local" : (user?.email ?? "");
+  const isNative = Capacitor.isNativePlatform();
 
   const selectedDevice = useMemo(
     () => devices.find((device) => device.id === selectedId) ?? devices[0] ?? null,
@@ -122,8 +125,41 @@ export default function ConsolePage({ user, demo = false, onExitDemo }: Props) {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-app">
-      <MapPanel telemetry={telemetry} theme={theme} stolen={Boolean(selectedDevice?.isStolen)} />
+      <MapPanel
+        telemetry={telemetry}
+        theme={theme}
+        stolen={Boolean(selectedDevice?.isStolen)}
+        lastKnown={
+          selectedDevice?.lastTelemetry
+            ? {
+                lat: selectedDevice.lastTelemetry.lat,
+                lng: selectedDevice.lastTelemetry.lng,
+                accuracy: selectedDevice.lastTelemetry.accuracy,
+                trigger: selectedDevice.lastTelemetry.trigger
+              }
+            : null
+        }
+      />
 
+      {isNative ? (
+        <MobileConsole
+          user={user}
+          demo={demo}
+          email={email}
+          theme={theme}
+          onThemeChange={setTheme}
+          devices={devices}
+          selectedDevice={selectedDevice}
+          selectedId={selectedId}
+          onSelectDevice={setSelectedId}
+          telemetry={telemetry}
+          loading={loading}
+          streamError={streamError}
+          onSignOut={() => signOut(auth())}
+          onLeaveDemo={leaveDemo}
+          runCommand={runCommand}
+        />
+      ) : (
       <aside className="absolute inset-x-3 bottom-3 top-auto z-[500] max-h-[72vh] overflow-y-auto md:inset-x-auto md:inset-y-4 md:left-4 md:max-h-none md:w-[384px]">
         <div className="panel flex flex-col gap-4 p-4">
           <header className="flex items-center justify-between gap-2">
@@ -222,7 +258,9 @@ export default function ConsolePage({ user, demo = false, onExitDemo }: Props) {
                     <strong className="text-ink">
                       {selectedDevice.lastTelemetry?.battery != null
                         ? `${selectedDevice.lastTelemetry.battery}%`
-                        : "—"}
+                        : selectedDevice.battery != null
+                          ? `${selectedDevice.battery}%`
+                          : "—"}
                     </strong>
                   </span>
                   <span className="rounded-lg bg-app px-2.5 py-1.5">
@@ -247,6 +285,7 @@ export default function ConsolePage({ user, demo = false, onExitDemo }: Props) {
           </footer>
         </div>
       </aside>
+      )}
     </div>
   );
 }

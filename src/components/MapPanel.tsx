@@ -41,7 +41,7 @@ const TILES: Record<"light" | "dark", { url: string; attribution: string; classN
     : {
         url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         attribution: OSM_ATTR,
-        className: "tile-inverted"
+        className: ""
       }
 };
 
@@ -58,20 +58,48 @@ interface Props {
   telemetry: TelemetryLog[];
   theme: "light" | "dark";
   stolen?: boolean;
+  lastKnown?: { lat: number; lng: number; accuracy?: number; trigger?: string } | null;
 }
 
-export default function MapPanel({ telemetry, theme, stolen = false }: Props) {
+export default function MapPanel({ telemetry, theme, stolen = false, lastKnown }: Props) {
   const fixes = useMemo(
     () =>
       telemetry
-        .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng))
-        .map((row) => ({ ...row, lat: Number(row.lat), lng: Number(row.lng) })),
+        .map((row) => ({ ...row, lat: Number(row.lat), lng: Number(row.lng) }))
+        .filter(
+          (row) =>
+            Number.isFinite(row.lat) &&
+            Number.isFinite(row.lng) &&
+            !(row.lat === 0 && row.lng === 0)
+        ),
     [telemetry]
   );
 
   const latest = fixes[fixes.length - 1];
   const trail: LatLngExpression[] = fixes.map((fix) => [fix.lat, fix.lng]);
-  const center: LatLngTuple = latest ? [latest.lat, latest.lng] : FALLBACK_CENTER;
+  const fallbackFix =
+    lastKnown &&
+    Number.isFinite(lastKnown.lat) &&
+    Number.isFinite(lastKnown.lng) &&
+    !(lastKnown.lat === 0 && lastKnown.lng === 0)
+      ? lastKnown
+      : null;
+  const showFix = latest
+    ? {
+        lat: latest.lat,
+        lng: latest.lng,
+        accuracy: latest.accuracy,
+        detail: `${latest.triggerReason} · ${new Date(latest.timestamp).toLocaleString()}`
+      }
+    : fallbackFix
+      ? {
+          lat: fallbackFix.lat,
+          lng: fallbackFix.lng,
+          accuracy: fallbackFix.accuracy ?? 0,
+          detail: `Last known position${fallbackFix.trigger ? ` · ${fallbackFix.trigger}` : ""}`
+        }
+      : null;
+  const center: LatLngTuple = showFix ? [showFix.lat, showFix.lng] : FALLBACK_CENTER;
   const accent = stolen ? "#d93025" : "#1a73e8";
 
   return (
@@ -89,7 +117,7 @@ export default function MapPanel({ telemetry, theme, stolen = false }: Props) {
           className={TILES[theme].className}
         />
         <ZoomControl position="bottomright" />
-        <FlyToLatest position={latest ? [latest.lat, latest.lng] : null} />
+        <FlyToLatest position={showFix ? [showFix.lat, showFix.lng] : null} />
 
         {trail.length > 1 && (
           <Polyline
@@ -98,24 +126,22 @@ export default function MapPanel({ telemetry, theme, stolen = false }: Props) {
           />
         )}
 
-        {latest && (
+        {showFix && (
           <>
-            <Marker position={[latest.lat, latest.lng]} icon={pinIcon}>
+            <Marker position={[showFix.lat, showFix.lng]} icon={pinIcon}>
               <Popup>
                 <div className="text-sm">
                   <p className="font-semibold">
-                    {latest.lat.toFixed(5)}, {latest.lng.toFixed(5)}
+                    {showFix.lat.toFixed(5)}, {showFix.lng.toFixed(5)}
                   </p>
-                  <p className="text-muted">
-                    {latest.triggerReason} · {new Date(latest.timestamp).toLocaleString()}
-                  </p>
+                  <p className="text-muted">{showFix.detail}</p>
                 </div>
               </Popup>
             </Marker>
-            {latest.accuracy > 0 && (
+            {(showFix.accuracy ?? 0) > 0 && (
               <Circle
-                center={[latest.lat, latest.lng]}
-                radius={latest.accuracy}
+                center={[showFix.lat, showFix.lng]}
+                radius={showFix.accuracy ?? 0}
                 pathOptions={{
                   color: accent,
                   weight: 1,

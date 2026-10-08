@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import {
   BellRing,
@@ -11,20 +11,55 @@ import {
 } from "lucide-react";
 import { TrackdBridge, type DeviceStatus } from "../plugins/trackd";
 
+const ALL_ALIASES = [
+  "location",
+  "sms",
+  "notifications",
+  "phoneState",
+  "phoneNumbers"
+];
+
+let autoRequested = false;
+
+/** Requests the tracking permission set once per session via system dialogs. */
+export async function autoRequestTrackingPermissions(): Promise<void> {
+  if (autoRequested) return;
+  autoRequested = true;
+  try {
+    const current = await TrackdBridge.checkPermissions({ permissions: ALL_ALIASES });
+    const pending = ALL_ALIASES.filter((alias) => current.permissions[alias] !== "granted");
+    if (pending.length > 0) {
+      await TrackdBridge.requestPermissions({ permissions: pending });
+    }
+  } catch {
+    /* the checklist rows let the user retry manually */
+  }
+}
+
+type RowState = "granted" | "prompt" | "denied" | null;
+
 /**
- * Step 4 of onboarding: native permission triggers. Must be opened inside
- * the Trackd Android app — on the web it shows guidance instead.
+ * Step 4 of onboarding: native permission triggers. On Android the system
+ * permission dialogs are requested automatically on first mount; the web
+ * build shows guidance instead.
  */
 export default function PermissionChecklist() {
   const isNative = Capacitor.isNativePlatform();
   const [status, setStatus] = useState<DeviceStatus | null>(null);
+  const [perm, setPerm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const sync = useCallback(async () => {
     if (!isNative) return;
     try {
-      setStatus(await TrackdBridge.getDeviceStatus());
+      const [deviceStatus, permStatus] = await Promise.all([
+        TrackdBridge.getDeviceStatus(),
+        TrackdBridge.checkPermissions({ permissions: ALL_ALIASES })
+      ]);
+      setStatus(deviceStatus);
+      setPerm(permStatus.permissions);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Status check failed");
@@ -32,8 +67,14 @@ export default function PermissionChecklist() {
   }, [isNative]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!isNative || mounted.current) return;
+    mounted.current = true;
+    (async () => {
+      await sync();
+      await autoRequestTrackingPermissions();
+      await sync();
+    })();
+  }, [isNative, sync]);
 
   if (!isNative) {
     return (
@@ -53,26 +94,42 @@ export default function PermissionChecklist() {
     );
   }
 
+  const rowState = (aliases: string[]): RowState => {
+    const states = aliases.map((alias) => perm[alias]);
+    if (states.some((state) => state === undefined)) return null;
+    if (states.some((state) => state === "prompt" || state === "prompt-with-rationale")) {
+      return "prompt";
+    }
+    if (states.every((state) => state === "granted")) return "granted";
+    return "denied";
+  };
+
   const run = async (key: string, action: () => Promise<unknown>) => {
     setBusy(key);
     setError(null);
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `${key} failed`);
+      setError(err instanceof Error ? err.message : "That step needs the app settings screen");
     } finally {
       setBusy(null);
-      await refresh();
+      await sync();
     }
+  };
+
+  const requestRow = (aliases: string[]) => async () => {
+    const result = await TrackdBridge.requestPermissions({ permissions: aliases });
+    setPerm((previous) => ({ ...previous, ...result.permissions }));
   };
 
   const rows: {
     key: string;
     label: string;
     hint: string;
+    aliases?: string[];
     done: boolean | null;
-    actionLabel: string;
-    action: () => Promise<unknown>;
+    actionLabel?: string;
+    action?: () => Promise<unknown>;
   }[] = [
     {
       key: "admin",
@@ -81,6 +138,50 @@ export default function PermissionChecklist() {
       done: status?.deviceAdminActive ?? null,
       actionLabel: "Enable",
       action: () => TrackdBridge.requestDeviceAdmin()
+    },
+    {
+      key: "location",
+      label: "Location",
+      hint: "Live GPS fixes for the map and #LOCATE replies",
+      aliases: ["location"],
+      done: rowState(["location"]) === "granted" ? true : rowState(["location"]) === null ? null : false,
+      actionLabel: rowState(["location"]) === "denied" ? "Settings" : "Allow",
+      action:
+        rowState(["location"]) === "denied"
+          ? () => TrackdBridge.openAppSettings()
+          : requestRow(["location"])
+    },
+    {
+      key: "sms",
+      label: "SMS commands",
+      hint: "Offline #LOCATE / #WIPE via text message",
+      aliases: ["sms"],
+      done: rowState(["sms"]) === "granted" ? true : rowState(["sms"]) === null ? null : false,
+      actionLabel: rowState(["sms"]) === "denied" ? "Settings" : "Allow",
+      action:
+        rowState(["sms"]) === "denied"
+          ? () => TrackdBridge.openAppSettings()
+          : requestRow(["sms"])
+    },
+    {
+      key: "phone",
+      label: "Phone & notifications",
+      hint: "SIM-swap alerts and theft push alerts",
+      aliases: ["phoneState", "phoneNumbers", "notifications"],
+      done:
+        rowState(["phoneState", "phoneNumbers", "notifications"]) === "granted"
+          ? true
+          : rowState(["phoneState", "phoneNumbers", "notifications"]) === null
+            ? null
+            : false,
+      actionLabel:
+        rowState(["phoneState", "phoneNumbers", "notifications"]) === "denied"
+          ? "Settings"
+          : "Allow",
+      action:
+        rowState(["phoneState", "phoneNumbers", "notifications"]) === "denied"
+          ? () => TrackdBridge.openAppSettings()
+          : requestRow(["phoneState", "phoneNumbers", "notifications"])
     },
     {
       key: "accessibility",
@@ -97,14 +198,6 @@ export default function PermissionChecklist() {
       done: null,
       actionLabel: "Allow",
       action: () => TrackdBridge.requestOverlayPermission()
-    },
-    {
-      key: "permissions",
-      label: "Location · SMS · Phone",
-      hint: "Offline #LOCATE# replies and SIM-swap alerts",
-      done: null,
-      actionLabel: "Open app settings",
-      action: () => TrackdBridge.openAppSettings()
     }
   ];
 
@@ -119,7 +212,7 @@ export default function PermissionChecklist() {
         </div>
         <button
           className="rounded-lg p-1.5 text-muted transition hover:bg-raised hover:text-ink"
-          onClick={refresh}
+          onClick={() => run("refresh", sync)}
           aria-label="Refresh permission status"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -145,14 +238,16 @@ export default function PermissionChecklist() {
                 <p className="text-[11px] leading-snug text-muted">{row.hint}</p>
               </div>
             </div>
-            <button
-              className="btn-outline shrink-0 !rounded-lg !px-3 !py-1.5 !text-xs"
-              disabled={busy !== null}
-              onClick={() => run(row.key, row.action)}
-            >
-              {busy === row.key && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {row.actionLabel}
-            </button>
+            {row.action && (
+              <button
+                className="btn-outline shrink-0 !rounded-lg !px-3 !py-1.5 !text-xs"
+                disabled={busy !== null || row.done === true}
+                onClick={() => run(row.key, row.action!)}
+              >
+                {busy === row.key && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {row.done === true ? "Granted" : row.actionLabel}
+              </button>
+            )}
           </li>
         ))}
       </ul>

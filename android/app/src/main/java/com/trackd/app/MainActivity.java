@@ -9,6 +9,13 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         FirestoreSync.INSTANCE.startCommandListener(this);
+        TelemetryDispatcher.INSTANCE.startPeriodic(this);
+    }
+
+    @Override
+    public void onDestroy() {
+        TelemetryDispatcher.INSTANCE.stopPeriodic();
+        super.onDestroy();
     }
 
     @Override

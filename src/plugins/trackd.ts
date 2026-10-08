@@ -40,6 +40,20 @@ export interface TrackdBridgePlugin {
   requestOverlayPermission(): Promise<void>;
   getDeviceStatus(): Promise<DeviceStatus>;
   markStolen(options: { stolen: boolean }): Promise<{ isStolen: boolean }>;
+  checkPermissions(options: { permissions: string[] }): Promise<PermissionStatus>;
+  requestPermissions(options: { permissions: string[] }): Promise<PermissionStatus>;
+  getLinkState(): Promise<LinkState>;
+}
+
+export interface PermissionStatus {
+  permissions: Record<string, string>;
+}
+
+export interface LinkState {
+  configured: boolean;
+  deviceId: string | null;
+  uid: string | null;
+  email: string | null;
 }
 
 export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
@@ -84,6 +98,15 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   }
   async markStolen(): Promise<{ isStolen: boolean }> {
     throw this.unavailable("Theft mode is only available on Android");
+  }
+  async checkPermissions(): Promise<PermissionStatus> {
+    return { permissions: {} };
+  }
+  async requestPermissions(): Promise<PermissionStatus> {
+    throw this.unavailable("Runtime permissions are only available on Android");
+  }
+  async getLinkState(): Promise<LinkState> {
+    return { configured: false, deviceId: null, uid: null, email: null };
   }
 }
 

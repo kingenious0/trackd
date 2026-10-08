@@ -98,7 +98,8 @@ export function subscribeDevices(
           requestLocate: Boolean(data.requestLocate),
           requestWipe: Boolean(data.requestWipe),
           lastSeenAt: data.lastSeenAt ? toIso(data.lastSeenAt) : new Date(0).toISOString(),
-          lastTelemetry: data.lastTelemetry
+          lastTelemetry: data.lastTelemetry,
+          battery: typeof data.battery === "number" ? data.battery : undefined
         } satisfies Device;
       });
       onData(devices);
@@ -134,7 +135,8 @@ export function subscribeDevice(
         requestLocate: Boolean(data.requestLocate),
         requestWipe: Boolean(data.requestWipe),
         lastSeenAt: data.lastSeenAt ? toIso(data.lastSeenAt) : new Date(0).toISOString(),
-        lastTelemetry: data.lastTelemetry
+        lastTelemetry: data.lastTelemetry,
+        battery: typeof data.battery === "number" ? data.battery : undefined
       });
     },
     (error) => onError?.(error)
@@ -148,7 +150,12 @@ export function subscribeTelemetry(
   onError?: (error: Error) => void
 ): Unsubscribe {
   if (isDemoMode()) return demoSubscribeTelemetry(onData);
-  const q = query(collection(db(), LOGS), where("deviceId", "==", deviceId), limit(250));
+  const q = query(
+    collection(db(), LOGS),
+    where("deviceId", "==", deviceId),
+    where("userId", "==", userId),
+    limit(250)
+  );
   return onSnapshot(
     q,
     (snapshot) => {

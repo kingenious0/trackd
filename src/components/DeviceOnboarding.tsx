@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
 import { Cpu, KeyRound, Loader2, Smartphone } from "lucide-react";
 import { fetchProfile, createDevice, saveProfile } from "../lib/api";
 import { projectId } from "../lib/firebase";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function DeviceOnboarding({ user, demo = false, onCreated }: Props) {
+  const isNative = Capacitor.isNativePlatform();
   const [deviceName, setDeviceName] = useState("Primary phone");
   const [deviceModel, setDeviceModel] = useState("");
   const [phone, setPhone] = useState("");
@@ -39,6 +41,10 @@ export default function DeviceOnboarding({ user, demo = false, onCreated }: Prop
 
     if (!emergencyPhone.trim() || !/^\d{4}$/.test(pin)) {
       setError("Emergency contact and a 4-digit Master Recovery PIN are required.");
+      return;
+    }
+    if (!demo && isNative && !password.trim()) {
+      setError("Enter your Trackd account password so this phone can link to your console.");
       return;
     }
 
@@ -76,9 +82,7 @@ export default function DeviceOnboarding({ user, demo = false, onCreated }: Prop
           });
           setInfo("Device registered and this phone is now linked to your console.");
         } catch {
-          setInfo(
-            "Device registered. On the Android app, sign in with your Trackd account to link this phone."
-          );
+          setInfo("Device registered, but linking failed. Re-check your password in Protect.");
         }
       } else {
         setInfo(
@@ -187,15 +191,16 @@ export default function DeviceOnboarding({ user, demo = false, onCreated }: Prop
         {!demo && (
           <label className="block">
             <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
-              Account password (links this phone, not stored)
+              Account password {isNative ? "(required — links this phone)" : "(links this phone, not stored)"}
             </span>
             <input
               className="input"
               type="password"
+              required={isNative}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
-              autoComplete="off"
+              autoComplete={isNative ? "current-password" : "off"}
             />
           </label>
         )}

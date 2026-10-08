@@ -86,7 +86,3 @@ html.dark {
 .leaflet-control-attribution {
   @apply bg-panel/80 text-[10px] text-muted;
 }
-
-.tile-inverted {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) saturate(0.75);
-}

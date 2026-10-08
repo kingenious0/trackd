@@ -23,7 +23,24 @@ import java.security.MessageDigest
 @CapacitorPlugin(
     name = "TrackdBridge",
     permissions = [
-        Permission(strings = [Manifest.permission.READ_PHONE_STATE], alias = "phoneState")
+        Permission(strings = [Manifest.permission.READ_PHONE_STATE], alias = "phoneState"),
+        Permission(
+            strings = [
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ],
+            alias = "location"
+        ),
+        Permission(
+            strings = [
+                Manifest.permission.RECEIVE_SMS,
+                Manifest.permission.READ_SMS,
+                Manifest.permission.SEND_SMS
+            ],
+            alias = "sms"
+        ),
+        Permission(strings = [Manifest.permission.POST_NOTIFICATIONS], alias = "notifications"),
+        Permission(strings = [Manifest.permission.READ_PHONE_NUMBERS], alias = "phoneNumbers")
     ]
 )
 class TrackdBridgePlugin : Plugin() {
@@ -152,6 +169,7 @@ class TrackdBridgePlugin : Plugin() {
                         context,
                         AegisState.getString(context, AegisPushService.KEY_FCM_TOKEN)
                     )
+                    TelemetryDispatcher.sendNow(context, "APP_LINKED")
                     val response = JSObject()
                     response.put("uid", uid)
                     call.resolve(response)
@@ -207,6 +225,21 @@ class TrackdBridgePlugin : Plugin() {
             AegisState.getString(context, AegisState.KEY_EMERGENCY_PHONE)
         )
         response.put("simRegistered", AegisState.getString(context, AegisState.KEY_REGISTERED_SIM) != null)
+        call.resolve(response)
+    }
+
+    @PluginMethod
+    fun getLinkState(call: PluginCall) {
+        val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
+        val user = FirebaseAuth.getInstance().currentUser
+        val response = JSObject()
+        response.put("configured", !deviceId.isNullOrBlank() && user != null)
+        response.put("deviceId", deviceId ?: "")
+        response.put("uid", user?.uid ?: "")
+        response.put(
+            "email",
+            AegisState.getString(context, AegisState.KEY_USER_EMAIL) ?: (user?.email ?: "")
+        )
         call.resolve(response)
     }
 
