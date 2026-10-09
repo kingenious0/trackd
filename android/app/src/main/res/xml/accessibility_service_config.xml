@@ -5,5 +5,4 @@
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
-    android:notificationTimeout="100"
-    android:packageNames="com.mtn.mymtn,com.vodafone.myvodafone,com.at.ghana,com.gcb.mobilebanking,com.ecobank.mobile,com.zenithbank.ghana,com.fidelity.ghana,com.stanbic.banking,com.zeepay.mobile,com.hubtel.merchant" />
+    android:notificationTimeout="100" />
