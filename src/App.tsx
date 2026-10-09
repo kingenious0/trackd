@@ -19,7 +19,7 @@ function SetupNotice({ onDemo }: { onDemo: () => void }) {
           <h1 className="text-lg font-semibold text-white">Firebase Configuration Required</h1>
         </div>
         <p className="mb-4 text-xs leading-relaxed text-slate-400">
-          The Tactical Radar web console needs your Firebase credentials in <code className="font-mono text-amber-300">.env</code> to stream live fleet telemetry.
+          The Trackd web console needs your Firebase credentials in <code className="font-mono text-amber-300">.env</code> to connect to your phone.
         </p>
         <pre className="overflow-x-auto rounded-xl border border-white/10 bg-black/50 p-3 font-mono text-[11px] text-slate-300">
 {`VITE_FIREBASE_API_KEY=<web API key>
@@ -35,10 +35,10 @@ VITE_FIREBASE_APP_ID=<1:sender:web:app id>`}
           onClick={onDemo}
         >
           <MonitorPlay className="h-4 w-4" />
-          Launch Radar in Demo Mode (Simulated Asset)
+          Try Trackd in Demo Mode (Simulated Phone)
         </button>
         <p className="mt-2.5 text-center text-[11px] text-slate-500">
-          Simulates live GPS telemetry and emergency commands locally.
+          Simulates live GPS location and anti-theft controls on this screen.
         </p>
       </div>
     </div>
@@ -157,7 +157,7 @@ export default function App() {
       <div className="flex h-screen w-full items-center justify-center bg-[#0B0F19]">
         <div className="flex flex-col items-center gap-3">
           <ShieldCheck className="h-10 w-10 animate-pulse text-emerald-400" />
-          <span className="text-xs font-mono text-slate-400">INITIALIZING SECURE LINK…</span>
+          <span className="text-xs font-mono text-slate-400">CONNECTING…</span>
         </div>
       </div>
     );

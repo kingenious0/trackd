@@ -209,7 +209,7 @@ export default function AuthPage({
             <p className="mt-1 text-xs text-neutral-400">
               {mode === "signin" 
                 ? "See your phone's location, battery and status from any browser."
-                : "Create an account to coordinate your anti-theft network."}
+                : "Create an account to start protecting your phone."}
             </p>
           </div>
 

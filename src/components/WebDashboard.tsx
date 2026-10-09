@@ -408,16 +408,16 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               </div>
             </div>
 
-            {/* Fleet Asset Selector Pills if multiple devices exist */}
+            {/* Device Selector Pills if multiple devices exist */}
             {loading ? (
               <div className="flex items-center gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                <span>Contacting fleet telemetry…</span>
+                <span>Connecting to phone…</span>
               </div>
             ) : devices.length > 1 ? (
               <div className="space-y-1.5">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
-                  Select Fleet Asset ({devices.length})
+                  Your Devices ({devices.length})
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {devices.map((device) => (
