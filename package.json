@@ -20,6 +20,7 @@
     "firebase-admin": "^14.5.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.446.0",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1"

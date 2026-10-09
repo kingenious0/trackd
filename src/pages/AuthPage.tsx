@@ -8,8 +8,10 @@ import { auth } from "../lib/firebase";
 import { saveProfile, apiUrl } from "../lib/api";
 import { sha256Hex, toUnsignedE164 } from "../lib/crypto";
 import {
+  AlertTriangle,
   CheckCircle2,
-  Crosshair,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   Lock,
@@ -41,7 +43,13 @@ async function postApi<T>(path: string, body: unknown): Promise<T> {
   return payload;
 }
 
-export default function AuthPage({ backendSlow = false }: { backendSlow?: boolean }) {
+export default function AuthPage({ 
+  backendSlow = false,
+  onSwitchToDownload
+}: { 
+  backendSlow?: boolean;
+  onSwitchToDownload?: () => void;
+}) {
   const [mode, setMode] = useState<Mode>("signin");
   const [theme, setTheme] = useState<Theme>(() =>
     document.documentElement.classList.contains("dark") ? "dark" : "light"
@@ -50,6 +58,7 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
   // signin
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   // signup wizard
   const [step, setStep] = useState(1);
@@ -172,33 +181,68 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
   }
 
   return (
-    <div className="relative flex min-h-full items-center justify-center overflow-hidden px-4 py-10">
-      <div className="pointer-events-none absolute -left-32 -top-32 h-96 w-96 rounded-full bg-accent/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-secure/10 blur-3xl" />
-
-      <div className="absolute right-4 top-4">
-        <ThemeToggle value={theme} onChange={setTheme} />
-      </div>
-
-      <div className="w-full max-w-md">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-white shadow-float">
-            <Crosshair className="h-7 w-7" />
+    <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-[#111215] text-[#EDEDED] font-sans antialiased selection:bg-blue-600 selection:text-white">
+      {/* Top Navigation */}
+      <header className="w-full border-b border-white/5 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-bold tracking-tight text-white">Trackd</span>
+            <span className="text-xs text-neutral-400 font-normal">by Kingenious</span>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight">Trackd</h1>
-          <p className="mt-1 text-sm text-muted">
-            Find your device. Protect your money. Even offline.
-          </p>
+
+          <div className="flex items-center gap-3">
+            <nav className="flex items-center gap-2">
+              <button
+                type="button"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-[#1C1D21] text-white border border-white/10 shadow-sm"
+              >
+                Track my phone
+              </button>
+              <button
+                type="button"
+                onClick={onSwitchToDownload}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-white transition"
+              >
+                Download app
+              </button>
+            </nav>
+            <ThemeToggle value={theme} onChange={setTheme} />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-md mx-auto w-full">
+        {/* Emergency Alert Banner */}
+        <div className="w-full mb-5">
+          <div className="rounded-2xl bg-[#1D160A] border border-[#B45309]/30 p-3.5 flex items-start gap-3 text-xs text-amber-200 shadow-sm">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              <strong className="text-amber-400 font-semibold">Lost your phone right now?</strong> Log in below to see its location and lock it down.
+            </p>
+          </div>
         </div>
 
-        <div className="panel space-y-4 p-6">
+        <div className="w-full rounded-2xl bg-[#17181C] border border-white/5 p-6 space-y-4 shadow-xl">
+          <div className="text-center mb-1">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              {mode === "signin" ? "Log in to Trackd" : "Create account"}
+            </h1>
+            <p className="mt-1 text-xs text-neutral-400">
+              {mode === "signin" 
+                ? "See your phone's location, battery and status from any browser."
+                : "Create an account to coordinate your anti-theft network."}
+            </p>
+          </div>
+
           {backendSlow && (
             <p className="rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-warning">
               Still connecting — check your internet. You can keep waiting; this page will
               update automatically.
             </p>
           )}
-          <div className="grid grid-cols-2 gap-1 rounded-full bg-raised p-1">
+
+          <div className="grid grid-cols-2 gap-1 rounded-full bg-[#1C1D21] p-1 border border-white/5">
             {(["signin", "signup"] as Mode[]).map((item) => (
               <button
                 key={item}
@@ -209,11 +253,11 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
                   setNotice(null);
                 }}
                 className={
-                  "rounded-full py-2 text-sm font-medium transition " +
-                  (mode === item ? "bg-panel text-ink shadow-soft" : "text-muted hover:text-ink")
+                  "rounded-full py-2 text-xs font-medium transition " +
+                  (mode === item ? "bg-[#2A2B32] text-white shadow-sm" : "text-neutral-400 hover:text-white")
                 }
               >
-                {item === "signin" ? "Sign in" : "Create account"}
+                {item === "signin" ? "Log in" : "Sign up"}
               </button>
             ))}
           </div>
@@ -221,44 +265,76 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
           {mode === "signin" ? (
             <form onSubmit={handleSignin} className="space-y-4">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="mb-1.5 block text-xs font-medium text-neutral-400">
                   Email
                 </span>
                 <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-muted" />
+                  <Mail className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-neutral-500" />
                   <input
-                    className="input pl-10"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder:text-neutral-500 focus:border-[#3B82F6] focus:outline-none transition"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@example.com"
                     autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
                 </div>
               </label>
+
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted">
+                <span className="mb-1.5 block text-xs font-medium text-neutral-400">
                   Password
                 </span>
                 <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-muted" />
+                  <Lock className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-neutral-500" />
                   <input
-                    className="input pl-10"
-                    type="password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder:text-neutral-500 focus:border-[#3B82F6] focus:outline-none transition"
+                    type={showPassword ? "text" : "password"}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete="current-password"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </label>
+
               {error && <AuthAlert kind="err" text={error} />}
-              <button className="btn-solid w-full !py-3" type="submit" disabled={busy}>
+
+              <button className="w-full py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs md:text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-[0.98] transition shadow-md" type="submit" disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                Sign in to console
+                <span>Log in to track phone</span>
               </button>
+
+              {/* First time prompt */}
+              <div className="pt-3 border-t border-white/5 text-center space-y-1">
+                <p className="text-xs text-neutral-400">
+                  First time here? You&apos;ll need the Trackd app on your phone before you can track it.
+                </p>
+                <button
+                  type="button"
+                  onClick={onSwitchToDownload}
+                  className="text-xs font-semibold text-[#38BDF8] hover:underline inline-flex items-center gap-1"
+                >
+                  <span>Download the app</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
             </form>
           ) : (
             <div className="space-y-4">
@@ -295,6 +371,9 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
                         onChange={(e) => setSuEmail(e.target.value)}
                         placeholder="you@example.com"
                         autoComplete="email"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                       />
                     </div>
                   </label>
@@ -313,6 +392,9 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
                         onChange={(e) => setSuPassword(e.target.value)}
                         placeholder="••••••••"
                         autoComplete="new-password"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                       />
                     </div>
                   </label>
@@ -442,7 +524,12 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
             </div>
           )}
         </div>
-      </div>
+      </main>
+
+      {/* Responsible Use Footer */}
+      <footer className="w-full py-6 text-center text-[11px] text-neutral-400 border-t border-white/5 px-4">
+        Trackd is for protecting a device you own. Setup requires physical access to the phone and a PIN you create.
+      </footer>
     </div>
   );
 }

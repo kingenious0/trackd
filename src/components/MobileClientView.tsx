@@ -10,7 +10,7 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { 
   Shield, Lock, LockOpen, MapPin, Zap, 
   MessageSquare, Volume2, Key, 
-  CheckCircle2, ChevronRight, ChevronLeft, ChevronUp, Eye, AlertTriangle, X, 
+  CheckCircle2, ChevronRight, ChevronLeft, ChevronUp, Eye, EyeOff, AlertTriangle, X, 
   LogOut, Loader2, Smartphone, 
   PhoneCall, Fingerprint, Delete, Check,
   Settings as SettingsIcon, Battery, Contact
@@ -851,6 +851,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   placeholder="name@email.com"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder-slate-500 focus:border-[#3B82F6] focus:outline-none transition"
                 />
               </div>
@@ -862,14 +865,18 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   placeholder="Password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder-slate-500 focus:border-[#3B82F6] focus:outline-none transition pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  <Eye className="w-3.5 h-3.5" />
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
               </div>
 

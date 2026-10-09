@@ -7,6 +7,7 @@ import { isDemoMode, setDemoMode } from "./lib/demo";
 import AuthPage from "./pages/AuthPage";
 import WebDashboard from "./components/WebDashboard";
 import MobileClientView from "./components/MobileClientView";
+import DownloadView from "./components/DownloadView";
 import { MonitorPlay, ShieldCheck, TriangleAlert } from "lucide-react";
 
 function SetupNotice({ onDemo }: { onDemo: () => void }) {
@@ -56,6 +57,21 @@ export default function App() {
   const forceApkView = isDev && viewOverride === "apk";
   const forceWebView = isDev && viewOverride === "web";
   const showApk = forceApkView || (isNative && !forceWebView);
+
+  const [webTab, setWebTab] = useState<"track" | "download">(() => {
+    return searchParams.get("tab") === "download" ? "download" : "track";
+  });
+
+  const handleSwitchTab = (tab: "track" | "download") => {
+    setWebTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "download") {
+      url.searchParams.set("tab", "download");
+    } else {
+      url.searchParams.delete("tab");
+    }
+    window.history.pushState({}, "", url.toString());
+  };
 
   const [user, setUser] = useState<User | null>(null);
   const [booting, setBooting] = useState(true);
@@ -172,6 +188,8 @@ export default function App() {
         onExitDemo={() => setDemo(false)}
       />
     );
+  } else if (webTab === "download") {
+    content = <DownloadView onSwitchToLogin={() => handleSwitchTab("track")} />;
   } else if (user) {
     content = (
       <WebDashboard
@@ -180,7 +198,12 @@ export default function App() {
       />
     );
   } else {
-    content = <AuthPage backendSlow={slowBoot} />;
+    content = (
+      <AuthPage 
+        backendSlow={slowBoot} 
+        onSwitchToDownload={() => handleSwitchTab("download")} 
+      />
+    );
   }
 
   return (
