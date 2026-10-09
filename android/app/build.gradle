@@ -17,8 +17,17 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            storeFile file('trackd-release.keystore')
+            storePassword System.getenv("TRACKD_KEYSTORE_PASSWORD") ?: "trackd2026kingenious"
+            keyAlias "trackd"
+            keyPassword System.getenv("TRACKD_KEY_PASSWORD") ?: "trackd2026kingenious"
+        }
+    }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

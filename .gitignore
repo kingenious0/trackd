@@ -11,6 +11,8 @@ android/local.properties
 android/app/src/main/assets/public/
 **/google-services.json
 *.log
+*.keystore
+*.jks
 
 .vercel
 .env*
