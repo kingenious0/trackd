@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { User } from 'firebase/auth';
 import { 
   Crosshair, Volume2, ShieldCheck, Lock, Trash2, 
-  BatteryCharging, Copy, Check, ChevronUp, ChevronDown, 
+  Battery, Copy, Check, ChevronUp, ChevronDown, 
   LogOut, MapPin, Signal, Clock, Compass, Layers, 
   Plus, Minus, ExternalLink, MonitorPlay, Loader2
 } from 'lucide-react';
@@ -50,7 +50,7 @@ function MapRecenter({ coords }: { coords: [number, number] }) {
   const map = useMap();
   useEffect(() => {
     if (coords[0] !== 0 && coords[1] !== 0) {
-      map.flyTo(coords, map.getZoom() > 14 ? map.getZoom() : 16, { animate: true, duration: 1.2 });
+      map.flyTo(coords, map.getZoom() > 14 ? map.getZoom() : 14, { animate: true, duration: 1.2 });
     }
   }, [coords, map]);
   return null;
@@ -77,7 +77,7 @@ function MapController({ coords }: { coords: [number, number] }) {
           <Minus className="w-4 h-4" />
         </button>
         <button
-          onClick={() => map.flyTo(coords, 16, { animate: true, duration: 1 })}
+          onClick={() => map.flyTo(coords, 14, { animate: true, duration: 1 })}
           aria-label="Recenter on target"
           title="Recenter on Target"
           className="p-3 text-blue-600 dark:text-blue-400 hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95"
@@ -102,6 +102,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [darkMapMode, setDarkMapMode] = useState(false);
   const [areaName, setAreaName] = useState<string>('Resolving location…');
+  const [showSmsDirectives, setShowSmsDirectives] = useState(false);
 
   const userId = demo ? DEMO_USER_ID : user?.uid ?? 'demo-user';
   const email = demo ? 'demo@trackd.local' : user?.email ?? 'Operator';
@@ -245,7 +246,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
       <div className={`absolute inset-0 z-0 ${darkMapMode ? 'dark-osm-tiles' : ''}`}>
         <MapContainer 
           center={currentCoords} 
-          zoom={15} 
+          zoom={14} 
           zoomControl={false}
           scrollWheelZoom={true} 
           className="h-full w-full"
@@ -360,8 +361,8 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             <div className="hidden md:flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono tracking-wider uppercase text-blue-400 font-semibold">
-                    TRACKD CONSOLE
+                  <span className="text-xs font-semibold text-slate-400 tracking-tight">
+                    Trackd Console
                   </span>
                   {demo && (
                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -379,7 +380,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-emerald-400">
-                  <BatteryCharging className="w-3.5 h-3.5" />
+                  <Battery className="w-3.5 h-3.5" />
                   {batteryLevel}%
                 </div>
                 <button 
@@ -426,12 +427,12 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               <button 
                 onClick={() => handleAction('LOCATE')}
                 disabled={dispatching !== null}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-semibold text-xs transition shadow-lg shadow-blue-600/30 disabled:opacity-50"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
               >
                 {dispatching === 'LOCATE' ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
                 ) : (
-                  <Crosshair className="w-4 h-4" />
+                  <Crosshair className="w-4 h-4 text-slate-300" />
                 )}
                 Locate Live
               </button>
@@ -439,12 +440,12 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               <button 
                 onClick={() => handleAction('SIREN')}
                 disabled={dispatching !== null}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/15 active:scale-[0.98] text-slate-200 font-semibold text-xs border border-white/10 transition disabled:opacity-50"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
               >
                 {dispatching === 'SIREN' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
                 ) : (
-                  <Volume2 className="w-4 h-4 text-amber-400" />
+                  <Volume2 className="w-4 h-4 text-slate-300" />
                 )}
                 Play Sound
               </button>
@@ -486,10 +487,11 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-400">
                   <Signal className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>Telemetry Channel</span>
+                  <span>Status</span>
                 </div>
-                <span className="font-mono text-emerald-400 font-medium">
-                  {selectedDevice?.lastTelemetry?.trigger || latestLog?.triggerReason || 'FCM_WAKE'}
+                <span className="font-medium text-emerald-400 flex items-center gap-1.5 text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Online
                 </span>
               </div>
 
@@ -538,7 +540,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   ) : (
                     <Lock className="w-4 h-4" />
                   )}
-                  Mark Stolen (Engage Lock)
+                  Mark as Stolen
                 </button>
               )}
 
@@ -554,38 +556,48 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               )}
             </div>
 
-            {/* Offline SMS Fail-Safe Cards */}
-            <div className="pt-2 border-t border-white/5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 block">
-                  Offline SMS Directives
+            {/* Offline SMS Fail-Safe Collapsible Accordion */}
+            <div className="pt-2 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setShowSmsDirectives(!showSmsDirectives)}
+                className="w-full flex items-center justify-between py-2 text-left text-slate-400 hover:text-slate-200 transition group"
+              >
+                <span className="text-xs font-medium text-slate-300 group-hover:text-white transition">
+                  No internet? Use SMS commands instead
                 </span>
-                <span className="text-[10px] text-slate-500 font-mono">Zero Internet Required</span>
-              </div>
-              {[
-                { label: 'Force Location Fix', code: '#LOCATE#[PIN]' },
-                { label: 'Trigger Sound Siren', code: '#SIREN#[PIN]' },
-                { label: 'Engage Theft Lock', code: '#STOLEN#[PIN]' },
-                { label: 'Disarm Theft Lock', code: '#SAFE#[PIN]' }
-              ].map((sms, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs font-mono">
-                  <div>
-                    <span className="text-slate-400 text-[10px] block">{sms.label}</span>
-                    <span className="text-blue-400 font-bold">{sms.code}</span>
-                  </div>
-                  <button 
-                    onClick={() => copySms(sms.code)}
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
-                    title="Copy SMS command"
-                  >
-                    {copiedCode === sms.code ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showSmsDirectives ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showSmsDirectives && (
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] text-slate-500 font-mono block">Zero internet required · Send directly to handset</span>
+                  {[
+                    { label: 'Force Location Fix', code: '#LOCATE#[PIN]' },
+                    { label: 'Trigger Sound Siren', code: '#SIREN#[PIN]' },
+                    { label: 'Engage Theft Lock', code: '#STOLEN#[PIN]' },
+                    { label: 'Disarm Theft Lock', code: '#SAFE#[PIN]' }
+                  ].map((sms, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs font-mono">
+                      <div>
+                        <span className="text-slate-400 text-[10px] block">{sms.label}</span>
+                        <span className="text-blue-400 font-bold">{sms.code}</span>
+                      </div>
+                      <button 
+                        onClick={() => copySms(sms.code)}
+                        className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                        title="Copy SMS command"
+                      >
+                        {copiedCode === sms.code ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
 
           </div>

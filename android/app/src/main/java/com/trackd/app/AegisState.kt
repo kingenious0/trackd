@@ -19,6 +19,8 @@ object AegisState {
     const val KEY_DEVICE_ID = "device_id"
     const val KEY_USER_ID = "firebase_user_id"
     const val KEY_USER_EMAIL = "firebase_user_email"
+    const val KEY_FAILED_SMS_ATTEMPTS = "failed_sms_attempts"
+    const val KEY_SMS_LOCKOUT_UNTIL = "sms_lockout_until"
 
     @Volatile
     private var cached: SharedPreferences? = null
@@ -57,6 +59,20 @@ object AegisState {
 
     fun getString(context: Context, key: String): String? =
         prefs(context).getString(key, null)
+
+    fun putInt(context: Context, key: String, value: Int) {
+        prefs(context).edit().putInt(key, value).apply()
+    }
+
+    fun getInt(context: Context, key: String, default: Int = 0): Int =
+        prefs(context).getInt(key, default)
+
+    fun putLong(context: Context, key: String, value: Long) {
+        prefs(context).edit().putLong(key, value).apply()
+    }
+
+    fun getLong(context: Context, key: String, default: Long = 0L): Long =
+        prefs(context).getLong(key, default)
 
     fun putBoolean(context: Context, key: String, value: Boolean) {
         prefs(context).edit().putBoolean(key, value).apply()

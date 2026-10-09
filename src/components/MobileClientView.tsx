@@ -10,10 +10,10 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { 
   Shield, Lock, LockOpen, MapPin, Zap, 
   MessageSquare, Volume2, Key, 
-  CheckCircle2, ChevronRight, Eye, AlertTriangle, X, 
+  CheckCircle2, ChevronRight, ChevronUp, Eye, AlertTriangle, X, 
   LogOut, Loader2, Smartphone, 
   PhoneCall, Fingerprint, Delete, Check,
-  Settings as SettingsIcon, Battery
+  Settings as SettingsIcon, Battery, Contact
 } from 'lucide-react';
 import { TrackdBridge, type LinkState } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
@@ -35,9 +35,49 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const [isStolen, setIsStolen] = useState(false);
 
   // Stored Offline Credentials
-  const [pin, setPin] = useState('7492');
+  const [pin, setPin] = useState('');
+  const [pinConfirm, setPinConfirm] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [_hasPinConfigured, setHasPinConfigured] = useState(false);
+  const [contactPickerName, setContactPickerName] = useState<string | null>(null);
+  const [pickingContact, setPickingContact] = useState(false);
+
+  // Staged HCI Progressive Disclosure (Loud once, then quiet)
+  const [heroHintCount, setHeroHintCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem('trackd_hint_hero') || '0', 10);
+  });
+  const showHeroHint = heroHintCount < 1;
+  const markHeroSeen = () => {
+    const next = heroHintCount + 1;
+    setHeroHintCount(next);
+    localStorage.setItem('trackd_hint_hero', next.toString());
+  };
+
+  const [settingsHintCount, setSettingsHintCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem('trackd_hint_settings') || '0', 10);
+  });
+  const showSettingsHint = settingsHintCount < 2;
+  const markSettingsSeen = () => {
+    const next = settingsHintCount + 1;
+    setSettingsHintCount(next);
+    localStorage.setItem('trackd_hint_settings', next.toString());
+  };
+
+  const [sirenHintCount, setSirenHintCount] = useState<number>(() => {
+    return parseInt(localStorage.getItem('trackd_hint_siren') || '0', 10);
+  });
+  const showSirenHint = sirenHintCount < 2;
+  const markSirenSeen = () => {
+    const next = sirenHintCount + 1;
+    setSirenHintCount(next);
+    localStorage.setItem('trackd_hint_siren', next.toString());
+  };
+
+  // Siren Hold-to-fire state
+  const [sirenHoldProgress, setSirenHoldProgress] = useState(0);
+  const [isHoldingSiren, setIsHoldingSiren] = useState(false);
+  const sirenHoldStartRef = React.useRef<number>(0);
+  const sirenAnimFrameRef = React.useRef<number | null>(null);
 
   // Web Sync & Firebase Account State
   const [linkState, setLinkState] = useState<LinkState>({
@@ -175,12 +215,13 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         if (typeof deviceStatus.batteryLevel === 'number' && deviceStatus.batteryLevel >= 0) {
           setBatteryLevel(deviceStatus.batteryLevel);
         }
-        if (deviceStatus.deviceModel) {
-          const brand = deviceStatus.deviceBrand || deviceStatus.deviceManufacturer || '';
-          const full = brand ? `${brand} ${deviceStatus.deviceModel}` : deviceStatus.deviceModel;
-          setDeviceName(full);
-          setDeviceNameInput((prev) => prev || full);
-        }
+        const detectedName = deviceStatus.deviceName || (
+          deviceStatus.deviceBrand || deviceStatus.deviceManufacturer
+            ? `${deviceStatus.deviceBrand || deviceStatus.deviceManufacturer} ${deviceStatus.deviceModel}`
+            : deviceStatus.deviceModel
+        ) || 'Android Sentinel';
+        setDeviceName(detectedName);
+        setDeviceNameInput((prev) => prev || detectedName);
         if (deviceStatus.hasPinConfigured) {
           setHasPinConfigured(true);
         }
@@ -537,6 +578,65 @@ export default function MobileClientView({ user: _user }: Props = {}) {
     }
   };
 
+  const handlePickContact = async () => {
+    try {
+      triggerHaptic('light');
+      setPickingContact(true);
+      const res = await TrackdBridge.pickContact();
+      if (res && res.phone) {
+        setEmergencyPhone(res.phone);
+        if (res.name) {
+          setContactPickerName(res.name);
+        }
+        triggerHaptic('success');
+      }
+    } catch (e) {
+      console.log('Contact pick cancelled or unavailable:', e);
+    } finally {
+      setPickingContact(false);
+    }
+  };
+
+  const startSirenHold = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (sirenPlaying) {
+      handleToggleSiren();
+      return;
+    }
+    triggerHaptic('light');
+    setIsHoldingSiren(true);
+    sirenHoldStartRef.current = Date.now();
+    const duration = 1500;
+
+    const tick = () => {
+      const elapsed = Date.now() - sirenHoldStartRef.current;
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      setSirenHoldProgress(pct);
+
+      if (elapsed >= duration) {
+        setIsHoldingSiren(false);
+        setSirenHoldProgress(0);
+        markSirenSeen();
+        handleToggleSiren();
+      } else {
+        sirenAnimFrameRef.current = requestAnimationFrame(tick);
+      }
+    };
+
+    sirenAnimFrameRef.current = requestAnimationFrame(tick);
+  };
+
+  const cancelSirenHold = () => {
+    if (isHoldingSiren) {
+      setIsHoldingSiren(false);
+      setSirenHoldProgress(0);
+      if (sirenAnimFrameRef.current) {
+        cancelAnimationFrame(sirenAnimFrameRef.current);
+      }
+      triggerHaptic('light');
+    }
+  };
+
   // ----------------------------------------------------
   // Siren Trigger
   // ----------------------------------------------------
@@ -876,33 +976,67 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               Step 3 of 6
             </span>
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              Offline Master PIN
+              Create Master PIN
             </h1>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              A 4-digit code to control this phone by SMS (locate, siren, emergency lock) even when it has zero cellular data or WiFi.
+              Your 4-digit master passcode to execute offline SMS commands (#LOCATE#, #SIREN#, #STOLEN#) and lock settings even when the phone has zero internet.
             </p>
 
-            <div className="my-6">
-              <input 
-                type="password"
-                maxLength={4}
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="7492"
-                className="w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-xl text-white focus:border-[#3B82F6] focus:outline-none"
-              />
+            <div className="my-5 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 block">
+                  New 4-Digit PIN
+                </label>
+                <input 
+                  type="password"
+                  maxLength={4}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••"
+                  className="w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-xl text-white focus:border-[#3B82F6] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1 block">
+                  Confirm Master PIN
+                </label>
+                <input 
+                  type="password"
+                  maxLength={4}
+                  value={pinConfirm}
+                  onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••"
+                  className={`w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#1C1D21] border font-mono text-xl text-white focus:outline-none ${
+                    pinConfirm && pin !== pinConfirm 
+                      ? 'border-rose-500/50 focus:border-rose-500 text-rose-300' 
+                      : 'border-white/5 focus:border-[#3B82F6]'
+                  }`}
+                />
+              </div>
+
+              {pinConfirm && pin !== pinConfirm && (
+                <p className="text-[11px] text-rose-400 text-center font-medium">
+                  PINs do not match
+                </p>
+              )}
             </div>
 
             <button
               onClick={() => {
-                if (pin.length === 4) {
-                  handleSavePin(pin);
-                  setWizardStep(4);
-                } else {
-                  alert('Enter 4 digits for PIN');
+                if (pin.length !== 4) {
+                  alert('Enter 4 digits for your Master PIN');
+                  return;
                 }
+                if (pin !== pinConfirm) {
+                  alert('PIN confirmation does not match');
+                  return;
+                }
+                handleSavePin(pin);
+                setWizardStep(4);
               }}
-              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+              disabled={pin.length !== 4 || pin !== pinConfirm}
+              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
             >
               Save Master PIN
             </button>
@@ -929,23 +1063,52 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               Emergency Backup Phone
             </h1>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              If this phone is stolen or an unauthorized SIM is inserted, Trackd secretly dispatches GPS coordinates to this trusted number.
+              If this phone is stolen or an unauthorized SIM is inserted, Trackd secretly dispatches emergency SMS alerts and GPS fixes to this trusted phone.
             </p>
 
-            <div className="my-6">
-              <input 
-                type="tel"
-                value={emergencyPhone}
-                onChange={(e) => setEmergencyPhone(e.target.value)}
-                placeholder="+233..."
-                className="w-full px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-sm text-white focus:border-[#3B82F6] focus:outline-none"
-              />
+            <div className="my-5 space-y-2.5">
+              <button
+                type="button"
+                onClick={handlePickContact}
+                disabled={pickingContact}
+                className="w-full py-3 px-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 flex items-center justify-center gap-2 transition active:scale-[0.98]"
+              >
+                {pickingContact ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-[#3B82F6]" />
+                ) : (
+                  <Contact className="w-4 h-4 text-[#3B82F6]" />
+                )}
+                <span>
+                  {contactPickerName ? `Selected: ${contactPickerName}` : 'Choose from Phone Contacts'}
+                </span>
+              </button>
+
+              <div className="relative">
+                <input 
+                  type="tel"
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(e.target.value)}
+                  placeholder="+233..."
+                  className="w-full px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-sm text-white focus:border-[#3B82F6] focus:outline-none"
+                />
+              </div>
+
+              {contactPickerName && (
+                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  <span>Contact: {contactPickerName}</span>
+                </div>
+              )}
             </div>
 
             <button
               onClick={() => {
-                handleSaveEmergencyPhone(emergencyPhone);
-                setWizardStep(5);
+                if (emergencyPhone.trim().length >= 4) {
+                  handleSaveEmergencyPhone(emergencyPhone.trim());
+                  setWizardStep(5);
+                } else {
+                  alert('Please enter a valid emergency contact number');
+                }
               }}
               className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
             >
@@ -1108,13 +1271,16 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         </div>
       </header>
 
-      {/* 2. Hero: Concentric Circles + Segments + Pills */}
-      <div 
+      {/* 2. Hero: Concentric Circles + Segments + Pills (Full Interactive Button) */}
+      <button 
+        type="button"
         onClick={() => {
           triggerHaptic('light');
+          markHeroSeen();
           setProtectionDetailsOpen(true);
         }}
-        className="flex-1 flex flex-col items-center justify-center my-auto cursor-pointer active:scale-[0.99] transition select-none"
+        aria-label={isAllPermsActive ? "Device fully protected" : `${totalSteps - activeSteps} fixes needed, tap for details`}
+        className="flex-1 w-full flex flex-col items-center justify-center my-auto cursor-pointer active:scale-[0.99] transition select-none bg-transparent border-0 text-center"
       >
         <div className="relative flex items-center justify-center size-44">
           <span 
@@ -1151,6 +1317,20 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           }
         </p>
 
+        {/* Staged HCI Progressive Hint */}
+        {!isAllPermsActive && (
+          showHeroHint ? (
+            <span className="flex flex-col items-center text-amber-400 mt-2.5 animate-bounce motion-reduce:animate-none">
+              <span className="text-xs font-semibold">Tap to set up</span>
+              <ChevronUp className="w-4 h-4 -mt-0.5" />
+            </span>
+          ) : (
+            <span className="text-xs text-slate-400/80 mt-2 font-medium">
+              Tap for details
+            </span>
+          )
+        )}
+
         {/* 6-Segment Horizontal Progress Bar */}
         <div className="flex items-center gap-1.5 w-full max-w-[200px] mx-auto mt-4">
           {permissionItems.map((item) => (
@@ -1175,7 +1355,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             <span>{perms.sms ? 'SMS ready' : 'SMS off'}</span>
           </div>
         </div>
-      </div>
+      </button>
 
       {/* 3. Bottom Inset Row + Action Button */}
       <div className="shrink-0 pt-2 space-y-2.5">
@@ -1183,9 +1363,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         <div 
           onClick={() => {
             triggerHaptic('light');
+            markSettingsSeen();
             setPinGateOpen(true);
           }}
-          className="rounded-2xl bg-[#1C1D21] border border-white/5 px-4 py-3.5 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#222329] transition"
+          className={`rounded-2xl bg-[#1C1D21] border px-4 py-3.5 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#222329] transition ${
+            showSettingsHint 
+              ? 'border-amber-500/30 shadow-sm shadow-amber-500/10' 
+              : 'border-white/5'
+          }`}
         >
           <div className="flex items-center gap-3">
             <SettingsIcon className="w-4 h-4 text-slate-400 shrink-0" />
@@ -1193,22 +1378,74 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               PIN and emergency contact
             </span>
           </div>
-          <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+          <div className="flex items-center gap-1.5">
+            {showSettingsHint && (
+              <span className="text-[11px] text-amber-400 font-semibold animate-pulse motion-reduce:animate-none">
+                Tap to open
+              </span>
+            )}
+            <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+          </div>
         </div>
 
-        {/* Primary Action Button */}
+        {/* Primary Action Button: Hold-to-fire Siren or Fix now */}
         {isAllPermsActive ? (
-          <button
-            onClick={handleToggleSiren}
-            className={`w-full py-3.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-[0.98] ${
+          <div 
+            onTouchStart={startSirenHold}
+            onTouchEnd={cancelSirenHold}
+            onTouchCancel={cancelSirenHold}
+            onMouseDown={startSirenHold}
+            onMouseUp={cancelSirenHold}
+            onMouseLeave={cancelSirenHold}
+            className={`relative overflow-hidden w-full py-3.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition cursor-pointer select-none active:scale-[0.98] ${
               sirenPlaying 
                 ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40 animate-pulse' 
+                : isHoldingSiren
+                ? 'bg-rose-950/40 border-2 border-rose-500 text-rose-300'
                 : 'bg-[#1C1D21] hover:bg-[#232529] border border-white/10 text-white shadow-md'
             }`}
           >
-            <Volume2 className="w-4 h-4" />
-            <span>{sirenPlaying ? 'Stop siren' : 'Test siren'}</span>
-          </button>
+            {/* Smooth SVG Hold Progress Background */}
+            {isHoldingSiren && (
+              <div 
+                className="absolute inset-y-0 left-0 bg-rose-600/30 transition-all duration-75"
+                style={{ width: `${sirenHoldProgress}%` }}
+              />
+            )}
+
+            {isHoldingSiren ? (
+              <div className="relative z-10 flex items-center gap-2 text-rose-300 font-bold normal-case text-xs">
+                <svg className="w-4 h-4 -rotate-90 animate-spin text-rose-400" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" fill="none" opacity="0.3" />
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" fill="none"
+                    strokeDasharray="56" strokeDashoffset={`${56 - (56 * sirenHoldProgress) / 100}`}
+                  />
+                </svg>
+                <span>Holding… keep pressing</span>
+              </div>
+            ) : sirenPlaying ? (
+              <div className="relative z-10 flex items-center gap-2">
+                <Volume2 className="w-4 h-4" />
+                <span>Stop siren</span>
+              </div>
+            ) : (
+              <div className="relative z-10 flex items-center justify-between w-full px-5">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-4 h-4 text-slate-300" />
+                  <span className="normal-case text-sm font-semibold">Test siren</span>
+                </div>
+                {showSirenHint ? (
+                  <span className="text-[11px] text-amber-400/90 font-medium normal-case animate-pulse motion-reduce:animate-none">
+                    Press and hold
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-500 font-normal normal-case">
+                    Hold to fire
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
           <button
             onClick={() => {

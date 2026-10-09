@@ -18,6 +18,7 @@ export interface DeviceStatus {
   simRegistered: boolean;
   batteryLevel?: number;
   overlayEnabled?: boolean;
+  deviceName?: string;
   deviceModel?: string;
   deviceManufacturer?: string;
   deviceBrand?: string;
@@ -67,6 +68,7 @@ export interface TrackdBridgePlugin {
   testHardwareSiren(options?: { durationMs?: number }): Promise<{ playing: boolean }>;
   stopHardwareSiren(): Promise<{ stopped: boolean }>;
   promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }>;
+  pickContact(): Promise<{ phone: string; name?: string }>;
 }
 
 export interface PermissionStatus {
@@ -97,6 +99,11 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   }
   async saveDeviceCredentials(): Promise<{ saved: boolean }> {
     return { saved: true };
+  }
+  async pickContact(): Promise<{ phone: string; name?: string }> {
+    const mock = window.prompt("Enter emergency contact phone number:", "+233540000000");
+    if (!mock) throw new Error("Contact selection cancelled");
+    return { phone: mock.replace(/[^0-9+]/g, ""), name: "Selected Contact" };
   }
   async configureAccount(options: {
     email: string;

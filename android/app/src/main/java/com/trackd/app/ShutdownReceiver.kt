@@ -37,12 +37,13 @@ class ShutdownReceiver : BroadcastReceiver() {
         val client = LocationServices.getFusedLocationProviderClient(context)
 
         val task = try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, timeout.token)
-            } else {
+            val hasPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                          ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (hasPerm) {
+                // Cache-first: read lastLocation immediately so we don't get killed waiting for cold GPS satellites
                 client.lastLocation
+            } else {
+                null
             }
         } catch (security: SecurityException) {
             Log.w(TAG, "location unavailable", security)
@@ -50,7 +51,14 @@ class ShutdownReceiver : BroadcastReceiver() {
         }
 
         task?.addOnCompleteListener { locationTask ->
-            val location = locationTask.result
+            var location = locationTask.result
+            if (location == null) {
+                // Fallback attempt: quick 1000ms current location if cache was null
+                try {
+                    val quickTask = client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, timeout.token)
+                    location = Tasks.await(quickTask, 1000, TimeUnit.MILLISECONDS)
+                } catch (_: Exception) {}
+            }
             timeout.cancel()
             val lat = location?.latitude
             val lng = location?.longitude
@@ -86,7 +94,9 @@ class ShutdownReceiver : BroadcastReceiver() {
                 written = postViaRest(context, lat, lng, accuracy)
             }
             worker.start()
-            worker.join(8000)
+            try {
+                worker.join(1800) // Fast 1.8s timeout before Android kills shutdown processes
+            } catch (_: Exception) {}
         }
         if (written) {
             Log.i(TAG, "shutdown telemetry written via Firestore REST")

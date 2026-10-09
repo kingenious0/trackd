@@ -349,7 +349,7 @@ export default function AuthPage({ backendSlow = false }: { backendSlow?: boolea
                   <p className="text-sm leading-relaxed text-muted">
                     Enter the 6-digit code texted to{" "}
                     <strong className="text-ink">{toUnsignedE164(phone)}</strong> from sender{" "}
-                    <strong className="font-mono text-ink">HOSTELHQ</strong>.
+                    <strong className="font-mono text-ink">Trackd</strong>.
                   </p>
                   <input
                     className="input text-center font-mono text-2xl tracking-[0.5em]"

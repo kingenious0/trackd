@@ -32,6 +32,9 @@ import androidx.biometric.BiometricPrompt
 import androidx.biometric.BiometricManager
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import android.provider.ContactsContract
+import androidx.activity.result.ActivityResult
+import com.getcapacitor.annotation.ActivityCallback
 
 @CapacitorPlugin(
     name = "TrackdBridge",
@@ -282,7 +285,25 @@ class TrackdBridgePlugin : Plugin() {
         }
         response.put("overlayEnabled", overlayEnabled)
 
-        // Real hardware model and manufacturer
+        // Real hardware model and friendly device name
+        var friendlyName = ""
+        try {
+            friendlyName = Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME) ?: ""
+        } catch (_: Exception) {}
+
+        if (friendlyName.isBlank()) {
+            try {
+                friendlyName = Settings.Secure.getString(context.contentResolver, "bluetooth_name") ?: ""
+            } catch (_: Exception) {}
+        }
+
+        if (friendlyName.isBlank()) {
+            val brand = Build.BRAND.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            val model = Build.MODEL
+            friendlyName = if (model.startsWith(brand, ignoreCase = true)) model else "$brand $model"
+        }
+
+        response.put("deviceName", friendlyName.trim())
         response.put("deviceModel", Build.MODEL)
         response.put("deviceManufacturer", Build.MANUFACTURER)
         response.put("deviceBrand", Build.BRAND)
@@ -514,6 +535,51 @@ class TrackdBridgePlugin : Plugin() {
     private fun sha256(input: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
         return digest.joinToString(separator = "") { "%02x".format(it) }
+    }
+
+    @PluginMethod
+    fun pickContact(call: PluginCall) {
+        val intent = Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+        startActivityForResult(call, intent, "pickContactResult")
+    }
+
+    @ActivityCallback
+    private fun pickContactResult(call: PluginCall, result: ActivityResult) {
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            val contactUri = result.data?.data
+            if (contactUri != null) {
+                try {
+                    val cursor = context.contentResolver.query(
+                        contactUri,
+                        arrayOf(
+                            ContactsContract.CommonDataKinds.Phone.NUMBER,
+                            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                        ),
+                        null,
+                        null,
+                        null
+                    )
+                    cursor?.use {
+                        if (it.moveToFirst()) {
+                            val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                            val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                            val rawPhone = if (numberIndex >= 0) it.getString(numberIndex) ?: "" else ""
+                            val name = if (nameIndex >= 0) it.getString(nameIndex) ?: "" else ""
+                            val cleanPhone = rawPhone.replace("[^0-9+]".toRegex(), "")
+                            val response = JSObject()
+                            response.put("phone", cleanPhone)
+                            response.put("name", name)
+                            call.resolve(response)
+                            return
+                        }
+                    }
+                } catch (e: Exception) {
+                    call.reject("Could not read selected contact: ${e.message}")
+                    return
+                }
+            }
+        }
+        call.reject("Contact selection cancelled")
     }
 
     private fun startActivity(call: PluginCall, intent: Intent) {

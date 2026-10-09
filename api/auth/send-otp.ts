@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: "HOSTELHQ",
+        from: "Trackd",
         to: [phoneNumber],
         body: `Your TRACKD verification code is: ${code}. Valid for 5 minutes.`
       })

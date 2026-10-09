@@ -37,13 +37,33 @@ class SmsCommandReceiver : BroadcastReceiver() {
             return
         }
 
-        Log.i(TAG, "Detected command: '${command.first}', verifying PIN...")
-
-        if (!pinMatches(context, command.second)) {
-            Log.w(TAG, "PIN mismatch or no PIN configured for command '${command.first}'. Ignoring.")
+        val now = System.currentTimeMillis()
+        val lockoutUntil = AegisState.getLong(context, AegisState.KEY_SMS_LOCKOUT_UNTIL, 0L)
+        if (now < lockoutUntil) {
+            val remainingSec = (lockoutUntil - now) / 1000
+            Log.w(TAG, "SMS commands locked out due to excessive failed PIN attempts. Cooldown: ${remainingSec}s remaining. Silently dropping.")
             return
         }
 
+        Log.i(TAG, "Detected command: '${command.first}', verifying PIN...")
+
+        if (!pinMatches(context, command.second)) {
+            val failed = AegisState.getInt(context, AegisState.KEY_FAILED_SMS_ATTEMPTS, 0) + 1
+            Log.w(TAG, "PIN mismatch for command '${command.first}'. Failure count: $failed/5.")
+            if (failed >= 5) {
+                val lockout = now + (15 * 60 * 1000L) // 15 minutes lockout
+                AegisState.putLong(context, AegisState.KEY_SMS_LOCKOUT_UNTIL, lockout)
+                AegisState.putInt(context, AegisState.KEY_FAILED_SMS_ATTEMPTS, 0)
+                Log.e(TAG, "SECURITY ALERT: 5 failed PIN attempts reached. SMS Command Receiver locked for 15 minutes.")
+            } else {
+                AegisState.putInt(context, AegisState.KEY_FAILED_SMS_ATTEMPTS, failed)
+            }
+            return
+        }
+
+        // On successful PIN authentication: reset failed attempts counter
+        AegisState.putInt(context, AegisState.KEY_FAILED_SMS_ATTEMPTS, 0)
+        AegisState.putLong(context, AegisState.KEY_SMS_LOCKOUT_UNTIL, 0L)
         Log.i(TAG, "PIN verified! Executing command: '${command.first}'")
 
         when (command.first) {

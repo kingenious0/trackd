@@ -3,6 +3,7 @@ package com.trackd.app
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.provider.Settings
@@ -40,12 +41,40 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         val foregroundPackage = event.packageName?.toString() ?: return
         if (foregroundPackage == packageName) return
         if (!AegisState.isStolen(this)) return
-        if (!FINTECH_PACKAGES.containsKey(foregroundPackage)) return
 
-        Log.i(TAG, "fintech launch intercepted: $foregroundPackage")
-        val appName = FINTECH_PACKAGES.getValue(foregroundPackage)
-        returnHome()
-        showCrashOverlay(appName)
+        // 1. Anti-Tamper: Block thief from opening Android Settings or Package Installer when phone is stolen
+        if (foregroundPackage == "com.android.settings" || 
+            foregroundPackage == "com.google.android.packageinstaller" || 
+            foregroundPackage == "com.android.packageinstaller"
+        ) {
+            Log.w(TAG, "Anti-tamper: settings or installer access blocked while stolen ($foregroundPackage)")
+            returnHome()
+            showCrashOverlay("Settings")
+            return
+        }
+
+        // 2. Check explicitly mapped Ghana fintech packages
+        var appName = FINTECH_PACKAGES[foregroundPackage]
+
+        // 3. Zero-Day Catch: Inspect package name and app label for banking/fintech indicators
+        if (appName == null) {
+            try {
+                val appInfo = packageManager.getApplicationInfo(foregroundPackage, 0)
+                val label = packageManager.getApplicationLabel(appInfo).toString()
+                val lowerPkg = foregroundPackage.lowercase()
+                val lowerLabel = label.lowercase()
+                val financeKeywords = listOf("bank", "momo", "wallet", "ghanapay", "money", "fintech", "cash")
+                if (financeKeywords.any { lowerPkg.contains(it) || lowerLabel.contains(it) }) {
+                    appName = if (label.isNotBlank()) label else "Banking App"
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (appName != null) {
+            Log.i(TAG, "fintech launch intercepted: $foregroundPackage ($appName)")
+            returnHome()
+            showCrashOverlay(appName)
+        }
     }
 
     override fun onInterrupt() {
@@ -120,16 +149,38 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         private const val TAG = "AegisDecoy"
 
         val FINTECH_PACKAGES: Map<String, String> = mapOf(
-            "com.mtn.mymtn" to "MTN Mobile Money",
-            "com.vodafone.myvodafone" to "Vodafone Cash",
-            "com.at.ghana" to "AT Money",
-            "com.gcb.mobilebanking" to "GCB Mobile Banking",
-            "com.ecobank.mobile" to "Ecobank Mobile",
-            "com.zenithbank.ghana" to "Zenith Bank",
-            "com.fidelity.ghana" to "Fidelity Bank",
-            "com.stanbic.banking" to "Stanbic Bank",
+            // Mobile Money & Wallets (Ghana)
+            "mtnft.momo.consumer" to "MTN Mobile Money",
+            "mtnft.momo.groupbiz" to "MTN MoMo Business",
+            "com.mtngh.mymtn" to "MyMTN Ghana",
+            "com.myvodafone.app" to "Telecel Cash",
+            "com.airteltigo.app" to "AT Money",
+            "com.gmoney.consumerapp" to "G-Money",
+            "ma.bits.ghipss_wallet_customer" to "GhanaPay",
+
+            // Commercial Banks (Ghana)
+            "com.modefin.gcbui" to "GCB Bank",
+            "com.ofss.gcbbank" to "GCB Internet Banking",
+            "com.app.ecobank" to "Ecobank Mobile",
+            "com.fidelity.mobile" to "Fidelity Bank",
+            "com.absa.gh.mobile.android.ui" to "Absa Ghana",
+            "com.sbg.mobile.phone" to "Stanbic Bank",
+            "calbank.com.app" to "CalBank",
+            "com.breezeghana.ui" to "SC Mobile Ghana",
+            "com.mode.umb.ui" to "UMB SpeedApp",
+            "gtbank.myghpay" to "GTBank",
+            "com.uba.vericash" to "UBA Mobile",
+            "zenithbank.com.zenithbankmobileappghana" to "Zenith Bank",
+            "com.xnett.fasyl.adb.mobilebanking" to "ADB Mobile",
+            "com.accessbank.accessbankapp" to "Access Bank",
+
+            // Fintechs, Wallets & Payment Gateways
+            "com.hubtel.hcb" to "Hubtel",
+            "com.expresspay" to "expressPay",
+            "com.dreamoval.slydepay.android.cruise" to "slydePay",
+            "com.cyst.mazzumapp" to "Mazzuma",
             "com.zeepay.mobile" to "Zeepay",
-            "com.hubtel.merchant" to "Hubtel Merchant"
+            "com.chippercash" to "Chipper Cash"
         )
     }
 }
