@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   User
 } from "lucide-react";
-import ThemeToggle, { type Theme } from "../components/ThemeToggle";
+import Navbar from "../components/Navbar";
 
 type Mode = "signin" | "signup";
 
@@ -51,9 +51,6 @@ export default function AuthPage({
   onSwitchToDownload?: () => void;
 }) {
   const [mode, setMode] = useState<Mode>("signin");
-  const [theme, setTheme] = useState<Theme>(() =>
-    document.documentElement.classList.contains("dark") ? "dark" : "light"
-  );
 
   // signin
   const [email, setEmail] = useState("");
@@ -183,33 +180,14 @@ export default function AuthPage({
   return (
     <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-[#111215] text-[#EDEDED] font-sans antialiased selection:bg-blue-600 selection:text-white">
       {/* Top Navigation */}
-      <header className="w-full border-b border-white/5 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-base font-bold tracking-tight text-white">Trackd</span>
-            <span className="text-xs text-neutral-400 font-normal">by Kingenious</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <nav className="flex items-center gap-2">
-              <button
-                type="button"
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-[#1C1D21] text-white border border-white/10 shadow-sm"
-              >
-                Track my phone
-              </button>
-              <button
-                type="button"
-                onClick={onSwitchToDownload}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-neutral-400 hover:text-white transition"
-              >
-                Download app
-              </button>
-            </nav>
-            <ThemeToggle value={theme} onChange={setTheme} />
-          </div>
-        </div>
-      </header>
+      <Navbar
+        currentTab="track"
+        onSwitchTab={(tab) => {
+          if (tab === "download" && onSwitchToDownload) {
+            onSwitchToDownload();
+          }
+        }}
+      />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-md mx-auto w-full">

@@ -168,6 +168,7 @@ export default function App() {
           demo
           user={null}
           onExitDemo={() => setDemo(false)}
+          onSwitchToDownload={() => handleSwitchTab("download")}
         />
       );
     } else {
@@ -186,6 +187,7 @@ export default function App() {
         demo
         user={null}
         onExitDemo={() => setDemo(false)}
+        onSwitchToDownload={() => handleSwitchTab("download")}
       />
     );
   } else if (webTab === "download") {
@@ -195,6 +197,7 @@ export default function App() {
       <WebDashboard
         user={user}
         onSignOut={() => signOut(auth())}
+        onSwitchToDownload={() => handleSwitchTab("download")}
       />
     );
   } else {

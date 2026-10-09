@@ -18,12 +18,14 @@ import { DEMO_USER_ID, demoAppendTelemetry, demoDelay, demoReset } from '../lib/
 import { formatLastSeen } from '../lib/format';
 import { getAreaName } from '../lib/geo';
 import WipeDialog from './WipeDialog';
+import Navbar from './Navbar';
 
 interface Props {
   user?: User | null;
   demo?: boolean;
   onExitDemo?: () => void;
   onSignOut?: () => void;
+  onSwitchToDownload?: () => void;
 }
 
 // Apple Maps inspired precision marker
@@ -59,7 +61,7 @@ function MapRecenter({ coords }: { coords: [number, number] }) {
 function MapController({ coords }: { coords: [number, number] }) {
   const map = useMap();
   return (
-    <div className="absolute top-6 right-6 z-[500] flex flex-col items-end gap-3 pointer-events-none">
+    <div className="absolute top-4 right-4 sm:right-6 z-[500] flex flex-col items-end gap-3 pointer-events-none">
       {/* Zoom and Recenter Pill */}
       <div className="flex flex-col rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] overflow-hidden pointer-events-auto">
         <button
@@ -89,7 +91,7 @@ function MapController({ coords }: { coords: [number, number] }) {
   );
 }
 
-export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut }: Props) {
+export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut, onSwitchToDownload }: Props) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetryLog[]>([]);
@@ -240,99 +242,112 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
   const googleMapsUrl = `https://www.google.com/maps?q=${currentCoords[0]},${currentCoords[1]}`;
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-slate-950 font-sans select-none">
-      
-      {/* 1. Full Bleed Map Layer (Crisp, zero-API-key OpenStreetMap) */}
-      <div className={`absolute inset-0 z-0 ${darkMapMode ? 'dark-osm-tiles' : ''}`}>
-        <MapContainer 
-          center={currentCoords} 
-          zoom={14} 
-          zoomControl={false}
-          scrollWheelZoom={true} 
-          className="h-full w-full"
-        >
-          {/* Crisp, Unwatermarked OpenStreetMap Vector Raster */}
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            maxZoom={19}
-          />
-          <MapRecenter coords={currentCoords} />
-          <MapController coords={currentCoords} />
+    <div className="relative h-screen w-screen overflow-hidden bg-slate-950 font-sans select-none flex flex-col">
+      {/* Unified Top Navigation */}
+      <Navbar
+        currentTab="track"
+        onSwitchTab={(tab) => {
+          if (tab === "download" && onSwitchToDownload) {
+            onSwitchToDownload();
+          }
+        }}
+        user={user}
+        onSignOut={handleSignOut}
+      />
 
-          {/* Accuracy radius ring */}
-          <Circle
-            center={currentCoords}
-            radius={accuracyMeters}
-            pathOptions={{
-              color: isStolen ? '#EF4444' : '#2563EB',
-              fillColor: isStolen ? '#EF4444' : '#2563EB',
-              fillOpacity: 0.12,
-              weight: 1.5,
-              dashArray: '4, 6'
-            }}
-          />
+      {/* Map and Overlays Container */}
+      <div className="relative flex-1 w-full overflow-hidden">
+        {/* 1. Full Bleed Map Layer (Crisp, zero-API-key OpenStreetMap) */}
+        <div className={`absolute inset-0 z-0 ${darkMapMode ? 'dark-osm-tiles' : ''}`}>
+          <MapContainer 
+            center={currentCoords} 
+            zoom={14} 
+            zoomControl={false}
+            scrollWheelZoom={true} 
+            className="h-full w-full"
+          >
+            {/* Crisp, Unwatermarked OpenStreetMap Vector Raster */}
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maxZoom={19}
+            />
+            <MapRecenter coords={currentCoords} />
+            <MapController coords={currentCoords} />
 
-          {/* Precision Apple Radar Pin Marker */}
-          <Marker position={currentCoords} icon={createApplePin(isStolen)}>
-            <Popup className="apple-popup">
-              <div className="p-1 font-sans">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className={`inline-block w-2 h-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-600'}`} />
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600">
-                    {isStolen ? 'Theft Mode Active' : 'Live Position'}
-                  </span>
+            {/* Accuracy radius ring */}
+            <Circle
+              center={currentCoords}
+              radius={accuracyMeters}
+              pathOptions={{
+                color: isStolen ? '#EF4444' : '#2563EB',
+                fillColor: isStolen ? '#EF4444' : '#2563EB',
+                fillOpacity: 0.12,
+                weight: 1.5,
+                dashArray: '4, 6'
+              }}
+            />
+
+            {/* Precision Apple Radar Pin Marker */}
+            <Marker position={currentCoords} icon={createApplePin(isStolen)}>
+              <Popup className="apple-popup">
+                <div className="p-1 font-sans">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`inline-block w-2 h-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-600'}`} />
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600">
+                      {isStolen ? 'Theft Mode Active' : 'Live Position'}
+                    </span>
+                  </div>
+                  <p className="font-bold text-sm text-slate-900">
+                    {selectedDevice?.deviceName ?? 'Target Device'}
+                  </p>
+                  <p className="text-xs font-medium text-slate-700 mt-0.5">
+                    {areaName}
+                  </p>
+                  <p className="text-[11px] font-mono text-slate-500 mt-1">
+                    {currentCoords[0].toFixed(5)}°, {currentCoords[1].toFixed(5)}°
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Accuracy: ±{Math.round(accuracyMeters)}m
+                  </p>
                 </div>
-                <p className="font-bold text-sm text-slate-900">
-                  {selectedDevice?.deviceName ?? 'Target Device'}
-                </p>
-                <p className="text-xs font-medium text-slate-700 mt-0.5">
-                  {areaName}
-                </p>
-                <p className="text-[11px] font-mono text-slate-500 mt-1">
-                  {currentCoords[0].toFixed(5)}°, {currentCoords[1].toFixed(5)}°
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">
-                  Accuracy: ±{Math.round(accuracyMeters)}m
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        </MapContainer>
-      </div>
+              </Popup>
+            </Marker>
+          </MapContainer>
+        </div>
 
-      {/* Top Floating Utility HUD Badge on Desktop */}
-      <div className="absolute top-6 right-20 z-[400] hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] text-xs text-slate-800 dark:text-slate-200">
-        <span className="flex h-2 w-2 relative">
-          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isStolen ? 'bg-rose-400' : 'bg-blue-400'}`} />
-          <span className={`relative inline-flex rounded-full h-2 w-2 ${isStolen ? 'bg-rose-500' : 'bg-blue-500'}`} />
-        </span>
-        <span className="font-semibold text-xs tracking-tight">{areaName}</span>
-        <span className="text-slate-400">|</span>
-        <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-          {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
-        </span>
-        <button
-          onClick={() => setDarkMapMode(!darkMapMode)}
-          className={`ml-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition flex items-center gap-1 ${
-            darkMapMode 
-              ? 'bg-blue-600/10 text-blue-500 border-blue-500/20' 
-              : 'bg-black/5 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/5 dark:border-white/5 hover:bg-black/10'
-          }`}
-          title="Toggle Dark Map Theme"
-        >
-          <Layers className="w-3 h-3" />
-          {darkMapMode ? 'Dark Map' : 'Standard'}
-        </button>
-      </div>
+        {/* Top Floating Utility HUD Badge on Desktop */}
+        <div className="absolute top-4 right-20 z-[400] hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] text-xs text-slate-800 dark:text-slate-200">
+          <span className="flex h-2 w-2 relative">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isStolen ? 'bg-rose-400' : 'bg-blue-400'}`} />
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${isStolen ? 'bg-rose-500' : 'bg-blue-500'}`} />
+          </span>
+          <span className="font-semibold text-xs tracking-tight">{areaName}</span>
+          <span className="text-slate-400">|</span>
+          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+            {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
+          </span>
+          <button
+            onClick={() => setDarkMapMode(!darkMapMode)}
+            className={`ml-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition flex items-center gap-1 ${
+              darkMapMode 
+                ? 'bg-blue-600/10 text-blue-500 border-blue-500/20' 
+                : 'bg-black/5 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/5 dark:border-white/5 hover:bg-black/10'
+            }`}
+            title="Toggle Dark Map Theme"
+          >
+            <Layers className="w-3 h-3" />
+            {darkMapMode ? 'Dark Map' : 'Standard'}
+          </button>
+        </div>
 
-      {/* 2. Apple Maps Floating Command Card (Desktop: Left Float / Mobile: Bottom Sheet) */}
-      <div className={`
-        absolute z-[1000] transition-all duration-500 ease-out
-        md:top-6 md:left-6 md:w-[390px] md:max-h-[calc(100vh-3rem)]
-        bottom-0 left-0 right-0 w-full
-        ${mobileDrawerOpen ? 'h-[85vh]' : 'h-24 md:h-auto'}
-      `}>
+        {/* 2. Apple Maps Floating Command Card (Desktop: Left Float / Mobile: Bottom Sheet) */}
+        <div className={`
+          absolute z-[1100] transition-all duration-500 ease-out
+          md:top-4 md:left-6 md:bottom-auto md:right-auto md:w-[390px] md:max-h-[calc(100%-2rem)]
+          bottom-0 left-0 right-0 w-full
+          ${mobileDrawerOpen ? 'h-[85vh]' : 'h-24 md:h-auto'}
+        `}>
         <div className="h-full flex flex-col rounded-t-[32px] md:rounded-[28px] bg-slate-900/85 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.55)] overflow-hidden">
           
           {/* Mobile Drag Indicator */}
@@ -602,6 +617,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
 
           </div>
         </div>
+      </div>
       </div>
 
       {/* Factory Wipe Confirmation Modal */}
