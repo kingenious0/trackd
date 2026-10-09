@@ -10,7 +10,7 @@ import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { 
   Shield, Lock, LockOpen, MapPin, Zap, 
   MessageSquare, Volume2, Key, 
-  CheckCircle2, ChevronRight, ChevronUp, Eye, AlertTriangle, X, 
+  CheckCircle2, ChevronRight, ChevronLeft, ChevronUp, Eye, AlertTriangle, X, 
   LogOut, Loader2, Smartphone, 
   PhoneCall, Fingerprint, Delete, Check,
   Settings as SettingsIcon, Battery, Contact
@@ -38,7 +38,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const [pin, setPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
-  const [_hasPinConfigured, setHasPinConfigured] = useState(false);
+  const [hasPinConfigured, setHasPinConfigured] = useState(false);
   const [contactPickerName, setContactPickerName] = useState<string | null>(null);
   const [pickingContact, setPickingContact] = useState(false);
 
@@ -100,6 +100,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // ----------------------------------------------------
   // Modals & Sheets State
   // ----------------------------------------------------
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean>(() => {
+    return localStorage.getItem('trackd_onboarding_complete') === 'true';
+  });
   const [wizardStep, setWizardStep] = useState<number>(1);
   const [forceSetupWizard, setForceSetupWizard] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -222,9 +225,8 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         ) || 'Android Sentinel';
         setDeviceName(detectedName);
         setDeviceNameInput((prev) => prev || detectedName);
-        if (deviceStatus.hasPinConfigured) {
-          setHasPinConfigured(true);
-        }
+        const pinConfigured = Boolean(deviceStatus.hasPinConfigured || localStorage.getItem('trackd_pin'));
+        setHasPinConfigured(pinConfigured);
         if (deviceStatus.emergencyContact) {
           setEmergencyPhone(deviceStatus.emergencyContact);
         }
@@ -232,6 +234,10 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
       if (linkRes) {
         setLinkState(linkRes);
+        if (linkRes.configured && !localStorage.getItem('trackd_onboarding_complete')) {
+          setWizardStep((prev) => (prev === 1 ? 2 : prev));
+          setForceSetupWizard(true);
+        }
       }
     } catch (e) {
       console.error('Status check failed:', e);
@@ -464,10 +470,12 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
   const currentViewState: ViewState = useMemo(() => {
     if (isStolen) return 'stolen';
-    if (!linkState.configured || forceSetupWizard) return 'setup';
+    if (!linkState.configured || !onboardingComplete || (!hasPinConfigured && !pin) || forceSetupWizard) {
+      return 'setup';
+    }
     if (isAllPermsActive) return 'armed';
     return 'degraded';
-  }, [isStolen, linkState.configured, forceSetupWizard, isAllPermsActive]);
+  }, [isStolen, linkState.configured, onboardingComplete, hasPinConfigured, pin, forceSetupWizard, isAllPermsActive]);
 
   // In degraded mode, items missing float to top!
   const sortedChecklist = useMemo(() => {
@@ -528,8 +536,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       const next = await TrackdBridge.getLinkState();
       setLinkState(next);
       triggerHaptic('success');
-      // Advance to Step 2 (Device Name)
+      // Advance to Step 2 (Device Name) and ensure wizard remains active
       setWizardStep(2);
+      setForceSetupWizard(true);
     } catch (err: unknown) {
       console.error('Auth error:', err);
       const errorObj = err as { message?: string; code?: string };
@@ -585,6 +594,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       const res = await TrackdBridge.pickContact();
       if (res && res.phone) {
         setEmergencyPhone(res.phone);
+        setPhoneChangeNew(res.phone);
         if (res.name) {
           setContactPickerName(res.name);
         }
@@ -707,6 +717,13 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       }
       const next = await TrackdBridge.getLinkState();
       setLinkState(next);
+      localStorage.removeItem('trackd_onboarding_complete');
+      localStorage.removeItem('trackd_pin');
+      setOnboardingComplete(false);
+      setHasPinConfigured(false);
+      setPin('');
+      setPinConfirm('');
+      setEmergencyPhone('');
       setSettingsSheetOpen(false);
       setWizardStep(1);
       setForceSetupWizard(true);
@@ -956,12 +973,22 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             >
               Continue
             </button>
-            <button
-              onClick={() => setWizardStep(3)}
-              className="mt-3 text-center text-xs text-slate-500 hover:text-slate-400"
-            >
-              Do this later
-            </button>
+            <div className="flex items-center justify-between mt-3">
+              <button
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(3)}
+                className="text-xs text-slate-500 hover:text-slate-400"
+              >
+                Do this later
+              </button>
+            </div>
           </div>
         )}
 
@@ -1040,12 +1067,22 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             >
               Save Master PIN
             </button>
-            <button
-              onClick={() => setWizardStep(4)}
-              className="mt-3 text-center text-xs text-slate-500 hover:text-slate-400"
-            >
-              Do this later
-            </button>
+            <div className="flex items-center justify-between mt-3">
+              <button
+                type="button"
+                onClick={() => setWizardStep(2)}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(4)}
+                className="text-xs text-slate-500 hover:text-slate-400"
+              >
+                Do this later
+              </button>
+            </div>
           </div>
         )}
 
@@ -1114,12 +1151,22 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             >
               Save Emergency Contact
             </button>
-            <button
-              onClick={() => setWizardStep(5)}
-              className="mt-3 text-center text-xs text-slate-500 hover:text-slate-400"
-            >
-              Do this later
-            </button>
+            <div className="flex items-center justify-between mt-3">
+              <button
+                type="button"
+                onClick={() => setWizardStep(3)}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setWizardStep(5)}
+                className="text-xs text-slate-500 hover:text-slate-400"
+              >
+                Do this later
+              </button>
+            </div>
           </div>
         )}
 
@@ -1162,12 +1209,22 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 Allow SMS access
               </button>
 
-              <button
-                onClick={() => setWizardStep(6)}
-                className="w-full text-center text-xs text-slate-500 hover:text-slate-400 py-2"
-              >
-                Do this later
-              </button>
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(4)}
+                  className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWizardStep(6)}
+                  className="text-xs text-slate-500 hover:text-slate-400"
+                >
+                  Do this later
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1219,6 +1276,8 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             <button
               onClick={() => {
                 triggerHaptic('success');
+                localStorage.setItem('trackd_onboarding_complete', 'true');
+                setOnboardingComplete(true);
                 setForceSetupWizard(false);
                 checkStatus();
               }}
@@ -1226,6 +1285,15 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             >
               Complete Setup
             </button>
+            <div className="flex items-center justify-start mt-3">
+              <button
+                type="button"
+                onClick={() => setWizardStep(5)}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1757,6 +1825,24 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   </p>
                 </div>
               </li>
+
+              {/* Row 4: Re-run setup wizard */}
+              <li 
+                onClick={() => {
+                  triggerHaptic('light');
+                  setSettingsSheetOpen(false);
+                  setWizardStep(2);
+                  setForceSetupWizard(true);
+                }}
+                className="flex items-center gap-3 px-4 min-h-14 active:bg-white/5 cursor-pointer transition"
+              >
+                <Shield className="size-5 shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">Setup wizard</p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">Re-run device & security setup</p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-slate-500" />
+              </li>
             </ul>
           </div>
 
@@ -1966,6 +2052,23 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           {phoneChangeStep === 2 && (
             <div className="space-y-3">
               <p className="text-xs text-slate-300">Enter new emergency contact number:</p>
+
+              <button
+                type="button"
+                onClick={handlePickContact}
+                disabled={pickingContact}
+                className="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 flex items-center justify-center gap-2 transition active:scale-[0.98]"
+              >
+                {pickingContact ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#3B82F6]" />
+                ) : (
+                  <Contact className="w-3.5 h-3.5 text-[#3B82F6]" />
+                )}
+                <span>
+                  {contactPickerName ? `Selected: ${contactPickerName}` : 'Choose from Phone Contacts'}
+                </span>
+              </button>
+
               <input
                 type="tel"
                 value={phoneChangeNew}
@@ -1975,7 +2078,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               />
               <button
                 onClick={async () => {
-                  if (phoneChangeNew.trim().length >= 6) {
+                  if (phoneChangeNew.trim().length >= 4) {
                     await handleSaveEmergencyPhone(phoneChangeNew.trim());
                     setEditPhoneModalOpen(false);
                     triggerHaptic('success');
