@@ -93,12 +93,38 @@ object FirestoreSync {
         }
     }
 
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    fun ensureFcmToken(context: Context) {
+        val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
+        if (deviceId.isNullOrBlank()) return
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (!token.isNullOrBlank()) {
+                        Log.i(TAG, "FCM token fetched: $token")
+                        AegisState.putString(context, AegisPushService.KEY_FCM_TOKEN, token)
+                        pushFcmToken(context, token)
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Failed to get FCM token", e)
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "ensureFcmToken error", e)
+        }
+    }
+
     fun startCommandListener(context: Context) {
         val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
         if (deviceId.isNullOrBlank()) {
             Log.w(TAG, "no device id configured; listener not started")
             return
         }
+
+        ensureFcmToken(context)
+        syncDeviceState(context)
+
         if (FirebaseAuth.getInstance().currentUser == null) {
             Log.w(TAG, "not signed in yet; registering auth state listener to attach when ready")
             FirebaseAuth.getInstance().addAuthStateListener { auth ->
@@ -124,7 +150,12 @@ object FirestoreSync {
         registration = db.collection("devices").document(deviceId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.w(TAG, "device listener error", error)
+                    Log.w(TAG, "device listener error: ${error.message}; scheduling reconnect", error)
+                    registration?.remove()
+                    registration = null
+                    mainHandler.postDelayed({
+                        startCommandListener(context)
+                    }, 5000L)
                     return@addSnapshotListener
                 }
                 if (snapshot == null || !snapshot.exists()) return@addSnapshotListener
@@ -138,15 +169,41 @@ object FirestoreSync {
         registration = null
     }
 
-    fun pushFcmToken(context: Context, token: String?) {
-        if (token.isNullOrBlank()) return
+    fun syncDeviceState(context: Context) {
         val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
-        if (deviceId.isNullOrBlank() || FirebaseAuth.getInstance().currentUser == null) return
+        if (deviceId.isNullOrBlank()) return
+        try {
+            val db = FirebaseFirestore.getInstance()
+            db.collection("devices").document(deviceId).get()
+                .addOnSuccessListener { snapshot ->
+                    if (snapshot != null && snapshot.exists()) {
+                        handleDeviceSnapshot(context, db, deviceId, snapshot)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.w(TAG, "syncDeviceState get error: ${error.message}")
+                }
+        } catch (error: Throwable) {
+            Log.w(TAG, "syncDeviceState error", error)
+        }
+    }
+
+    fun pushFcmToken(context: Context, token: String?) {
+        val effectiveToken = token ?: AegisState.getString(context, AegisPushService.KEY_FCM_TOKEN)
+        if (effectiveToken.isNullOrBlank()) return
+        val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
+        if (deviceId.isNullOrBlank()) return
         try {
             FirebaseFirestore.getInstance()
                 .collection("devices")
                 .document(deviceId)
-                .update("fcmToken", token)
+                .update("fcmToken", effectiveToken)
+                .addOnSuccessListener {
+                    Log.i(TAG, "fcm token pushed to Firestore for $deviceId")
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "fcm token update in Firestore failed", e)
+                }
         } catch (error: Throwable) {
             Log.w(TAG, "fcm token push failed", error)
         }
@@ -171,8 +228,16 @@ object FirestoreSync {
         deviceId: String,
         snapshot: DocumentSnapshot
     ) {
-        val stolen = snapshot.getBoolean("isStolen") ?: false
-        if (AegisState.isStolen(context) != stolen) {
+        val rawStolen = snapshot.get("isStolen")
+        val stolen = when (rawStolen) {
+            is Boolean -> rawStolen
+            is String -> rawStolen.equals("true", ignoreCase = true)
+            is Number -> rawStolen.toInt() == 1
+            else -> false
+        }
+        val currentStolen = AegisState.isStolen(context)
+        Log.i(TAG, "device snapshot: isStolen=$stolen (current=$currentStolen)")
+        if (currentStolen != stolen) {
             AegisState.setStolen(context, stolen)
         }
 

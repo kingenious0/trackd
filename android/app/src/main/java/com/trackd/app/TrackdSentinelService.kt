@@ -15,6 +15,16 @@ import androidx.core.app.NotificationCompat
 
 class TrackdSentinelService : Service() {
 
+    private val syncHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val syncRunnable = object : Runnable {
+        override fun run() {
+            try {
+                FirestoreSync.syncDeviceState(this@TrackdSentinelService)
+            } catch (_: Exception) {}
+            syncHandler.postDelayed(this, 20_000L)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "TrackdSentinelService created - starting persistent background guard")
@@ -24,7 +34,10 @@ class TrackdSentinelService : Service() {
             Log.e(TAG, "Failed startForegroundNotification in onCreate", e)
         }
         FirestoreSync.startCommandListener(this)
+        FirestoreSync.ensureFcmToken(this)
         TelemetryDispatcher.startPeriodic(this)
+        syncHandler.removeCallbacks(syncRunnable)
+        syncHandler.postDelayed(syncRunnable, 5_000L)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -35,6 +48,7 @@ class TrackdSentinelService : Service() {
             Log.e(TAG, "Failed startForegroundNotification in onStartCommand", e)
         }
         FirestoreSync.startCommandListener(this)
+        FirestoreSync.ensureFcmToken(this)
         TelemetryDispatcher.startPeriodic(this)
         return START_STICKY
     }
@@ -43,6 +57,7 @@ class TrackdSentinelService : Service() {
 
     override fun onDestroy() {
         Log.w(TAG, "TrackdSentinelService destroyed - restarting via sticky intent")
+        syncHandler.removeCallbacks(syncRunnable)
         super.onDestroy()
     }
 

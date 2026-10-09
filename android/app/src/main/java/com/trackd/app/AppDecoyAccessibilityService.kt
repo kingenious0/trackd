@@ -24,20 +24,24 @@ class AppDecoyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         serviceInfo = serviceInfo?.apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
-            notificationTimeout = 100
+            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            notificationTimeout = 50
         }
         overlayWindow = getSystemService(WINDOW_SERVICE) as WindowManager
-        Log.i(TAG, "decoy accessibility service connected")
+        Log.i(TAG, "decoy accessibility service connected with financial USSD and app guard")
         TrackdSentinelService.start(this)
         FirestoreSync.startCommandListener(this)
+        FirestoreSync.ensureFcmToken(this)
+        FirestoreSync.syncDeviceState(this)
         TelemetryDispatcher.startPeriodic(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val foregroundPackage = event.packageName?.toString() ?: return
         if (foregroundPackage == packageName) return
         if (!AegisState.isStolen(this)) return
@@ -53,10 +57,30 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             return
         }
 
-        // 2. Check explicitly mapped Ghana fintech packages
+        // 2. USSD & Phone Dialer Shortcode Defense (*170#, *110#, MoMo transfer codes)
+        val isDialerOrPhone = DIALER_AND_PHONE_PACKAGES.contains(foregroundPackage) ||
+                foregroundPackage.contains("dialer") ||
+                foregroundPackage.contains("telephony") ||
+                foregroundPackage.contains("phone") ||
+                foregroundPackage.contains("incallui")
+
+        if (isDialerOrPhone) {
+            val interceptedReason = inspectUssdOrKeypad(event)
+            if (interceptedReason != null) {
+                Log.w(TAG, "Financial USSD intercepted: $interceptedReason in $foregroundPackage")
+                dismissActiveDialog()
+                performGlobalAction(GLOBAL_ACTION_BACK)
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                returnHome()
+                showCrashOverlay("Mobile Money Services ($interceptedReason)")
+                return
+            }
+        }
+
+        // 3. Check explicitly mapped Ghana fintech packages & SIM services
         var appName = FINTECH_PACKAGES[foregroundPackage]
 
-        // 3. Zero-Day Catch: Inspect package name and app label for banking/fintech indicators
+        // 4. Zero-Day Catch: Inspect package name and app label for banking/fintech indicators
         if (appName == null) {
             try {
                 val appInfo = packageManager.getApplicationInfo(foregroundPackage, 0)
@@ -74,6 +98,112 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             Log.i(TAG, "fintech launch intercepted: $foregroundPackage ($appName)")
             returnHome()
             showCrashOverlay(appName)
+        }
+    }
+
+    private fun inspectUssdOrKeypad(event: AccessibilityEvent): String? {
+        val eventText = event.text.joinToString(" ").lowercase()
+        val desc = event.contentDescription?.toString()?.lowercase() ?: ""
+        val combinedEvent = "$eventText $desc"
+
+        if (containsFinancialUssd(combinedEvent)) {
+            return extractShortcodeOrName(combinedEvent)
+        }
+
+        val root = try {
+            rootInActiveWindow
+        } catch (_: Exception) {
+            null
+        }
+
+        if (root != null) {
+            val treeMatch = scanNodeForFinancialUssd(root)
+            if (treeMatch != null) return treeMatch
+        }
+
+        val source = try {
+            event.source
+        } catch (_: Exception) {
+            null
+        }
+        if (source != null && source != root) {
+            val sourceMatch = scanNodeForFinancialUssd(source)
+            if (sourceMatch != null) return sourceMatch
+        }
+
+        return null
+    }
+
+    private fun containsFinancialUssd(text: String): Boolean {
+        if (text.contains("*170#") || text.contains("*170*") || text.contains("170#")) return true
+        if (text.contains("*110#") || text.contains("*110*") || text.contains("110#")) return true
+        if (text.contains("*718#") || text.contains("*718*") || text.contains("718#")) return true
+        if (text.contains("*711#") || text.contains("*713#") || text.contains("*389#")) return true
+
+        val lower = text.lowercase()
+        val hasTransfer = lower.contains("transfer money") || lower.contains("send money")
+        val hasMomo = lower.contains("momo") || lower.contains("mobile money") || 
+                lower.contains("telecel cash") || lower.contains("vodafone cash")
+        val hasCashOut = lower.contains("cash out") || lower.contains("allow cash out") || 
+                lower.contains("withdraw cash")
+        val hasMomopay = lower.contains("momopay") || lower.contains("pay bill") || lower.contains("buy airtime")
+        val hasWallet = lower.contains("my wallet") || lower.contains("wallet balance") || lower.contains("momo pin")
+
+        if (hasMomo || (hasTransfer && (lower.contains("ussd") || lower.contains("carrier") || lower.contains("select") || lower.contains("option"))) || hasCashOut || (hasMomopay && lower.contains("ussd")) || hasWallet) {
+            return true
+        }
+
+        return false
+    }
+
+    private fun extractShortcodeOrName(text: String): String {
+        return when {
+            text.contains("170") -> "*170# MTN MoMo"
+            text.contains("110") -> "*110# Telecel Cash"
+            text.contains("718") -> "*718# GhanaPay"
+            text.contains("telecel") || text.contains("vodafone") -> "Telecel Cash"
+            text.contains("momo") || text.contains("mobile money") -> "MTN MoMo"
+            else -> "*170# / *110#"
+        }
+    }
+
+    private fun scanNodeForFinancialUssd(node: android.view.accessibility.AccessibilityNodeInfo): String? {
+        try {
+            val nodeText = node.text?.toString() ?: ""
+            val nodeDesc = node.contentDescription?.toString() ?: ""
+            val combined = "$nodeText $nodeDesc".lowercase()
+
+            if (containsFinancialUssd(combined)) {
+                return extractShortcodeOrName(combined)
+            }
+
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                val res = scanNodeForFinancialUssd(child)
+                if (res != null) return res
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    private fun dismissActiveDialog() {
+        try {
+            val root = rootInActiveWindow ?: return
+            clickDismissRecursive(root)
+        } catch (_: Exception) {}
+    }
+
+    private fun clickDismissRecursive(node: android.view.accessibility.AccessibilityNodeInfo) {
+        val text = node.text?.toString()?.lowercase() ?: ""
+        if (text == "cancel" || text == "dismiss" || text == "exit" || text == "close") {
+            if (node.isClickable) {
+                node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+                return
+            }
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            clickDismissRecursive(child)
         }
     }
 
@@ -180,7 +310,30 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             "com.dreamoval.slydepay.android.cruise" to "slydePay",
             "com.cyst.mazzumapp" to "Mazzuma",
             "com.zeepay.mobile" to "Zeepay",
-            "com.chippercash" to "Chipper Cash"
+            "com.chippercash" to "Chipper Cash",
+
+            // SIM Toolkit Backdoors (MoMo Menu)
+            "com.android.stk" to "SIM Services (MoMo)",
+            "com.android.stk2" to "SIM Services (MoMo)"
+        )
+
+        val DIALER_AND_PHONE_PACKAGES: Set<String> = setOf(
+            "com.google.android.dialer",
+            "com.android.dialer",
+            "com.samsung.android.dialer",
+            "com.samsung.android.incallui",
+            "com.android.phone",
+            "com.android.incallui",
+            "com.transsion.dialer",
+            "com.sh.smart.caller",
+            "com.sprd.phone",
+            "com.sprd.dialer",
+            "com.oppo.dialer",
+            "com.coloros.dialer",
+            "com.vivo.dialer",
+            "com.miui.dialer",
+            "com.android.stk",
+            "com.android.stk2"
         )
     }
 }

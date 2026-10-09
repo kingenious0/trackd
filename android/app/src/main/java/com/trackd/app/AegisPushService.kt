@@ -13,15 +13,24 @@ class AegisPushService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        val action = message.data["action"] ?: return
-        Log.i(TAG, "push action: $action")
+        val action = (message.data["action"] ?: message.notification?.body ?: "").trim().uppercase()
+        Log.i(TAG, "push action received: $action (payload=${message.data})")
         when (action) {
-            "STOLEN" -> AegisState.setStolen(this, true)
-            "SAFE" -> AegisState.setStolen(this, false)
+            "STOLEN" -> {
+                AegisState.setStolen(this, true)
+                FirestoreSync.syncDeviceState(this)
+            }
+            "SAFE" -> {
+                AegisState.setStolen(this, false)
+                FirestoreSync.syncDeviceState(this)
+            }
             "LOCATE" -> TelemetryDispatcher.sendNow(this, "FCM_WAKE")
             "SIREN" -> HardwareAlarm.play(this, 30000L)
             "STOP_SIREN" -> HardwareAlarm.stop()
             "WIPE" -> AntiTheftAdminReceiver.executeWipe(this)
+            else -> {
+                FirestoreSync.syncDeviceState(this)
+            }
         }
     }
 

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { TrackdBridge, type LinkState } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
-import { createDevice } from '../lib/api';
+import { createDevice, subscribeDevice } from '../lib/api';
 
 interface Props {
   user?: User | null;
@@ -297,6 +297,22 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       clearInterval(pollTimer);
     };
   }, []);
+
+  // Real-time Firestore subscription to detect when marked stolen from the web console
+  useEffect(() => {
+    if (!linkState.configured || !linkState.deviceId) return;
+    const unsub = subscribeDevice(
+      linkState.deviceId,
+      (device) => {
+        if (!device) return;
+        const stolen = Boolean(device.isStolen);
+        setIsStolen(stolen);
+        TrackdBridge.markStolen({ stolen }).catch(() => undefined);
+      },
+      (err) => console.warn('Device subscribe error on mobile:', err)
+    );
+    return () => unsub();
+  }, [linkState.configured, linkState.deviceId]);
 
   // ----------------------------------------------------
   // Settings Auto-lock 60s Countdown

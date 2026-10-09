@@ -17,7 +17,7 @@ interface DownloadViewProps {
   onSwitchToLogin: () => void;
 }
 
-const SHA256_HASH = 'effa511084bc3ae46de822926d37b16174a026d1c6ebad34ccda0a98a9a69257';
+const SHA256_HASH = '4fbb8dd2c0087c0d61eb9273f5ad9779c5faf1343fab3d5ca5add9bd2b40d5d7';
 
 export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   const [copiedHash, setCopiedHash] = useState(false);
@@ -135,7 +135,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               <div className="mt-3.5 flex items-center justify-center gap-2 text-[11px] text-neutral-400">
                 <span className="font-mono text-white/80">v1.0.0</span>
                 <span>•</span>
-                <span>8.1 MB</span>
+                <span>22.3 MB</span>
                 <span>•</span>
                 <button
                   type="button"

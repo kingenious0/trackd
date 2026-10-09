@@ -198,6 +198,7 @@ class TrackdBridgePlugin : Plugin() {
                     AegisState.putString(context, AegisState.KEY_USER_ID, uid)
                     AegisState.putString(context, AegisState.KEY_USER_EMAIL, email)
                     FirestoreSync.startCommandListener(context)
+                    FirestoreSync.ensureFcmToken(context)
                     FirestoreSync.pushFcmToken(
                         context,
                         AegisState.getString(context, AegisPushService.KEY_FCM_TOKEN)

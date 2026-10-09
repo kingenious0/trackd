@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         TrackdSentinelService.Companion.start(this);
         FirestoreSync.INSTANCE.startCommandListener(this);
+        FirestoreSync.INSTANCE.ensureFcmToken(this);
         TelemetryDispatcher.INSTANCE.startPeriodic(this);
     }
 

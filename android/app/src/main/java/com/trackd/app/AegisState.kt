@@ -90,6 +90,17 @@ object AegisState {
     fun setStolen(context: Context, stolen: Boolean) {
         Log.i(TAG, "stolen flag -> $stolen")
         putBoolean(context, KEY_STOLEN, stolen)
+        if (stolen) {
+            try {
+                val home = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                    addCategory(android.content.Intent.CATEGORY_HOME)
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(home)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not launch home intent on setStolen", e)
+            }
+        }
     }
 
     fun isStolen(context: Context): Boolean =
