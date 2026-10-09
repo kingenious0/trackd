@@ -28,6 +28,10 @@ import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
 import com.google.firebase.auth.FirebaseAuth
 import java.security.MessageDigest
+import androidx.biometric.BiometricPrompt
+import androidx.biometric.BiometricManager
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 
 @CapacitorPlugin(
     name = "TrackdBridge",
@@ -391,6 +395,75 @@ class TrackdBridgePlugin : Plugin() {
         val response = JSObject()
         response.put("stopped", true)
         call.resolve(response)
+    }
+
+    @PluginMethod
+    fun promptBiometric(call: PluginCall) {
+        val fragmentActivity = activity as? FragmentActivity
+        if (fragmentActivity == null) {
+            val response = JSObject()
+            response.put("authenticated", false)
+            response.put("error", "Host activity is unavailable")
+            call.resolve(response)
+            return
+        }
+
+        fragmentActivity.runOnUiThread {
+            try {
+                val biometricManager = BiometricManager.from(context)
+                val canAuth = biometricManager.canAuthenticate(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+                )
+
+                if (canAuth != BiometricManager.BIOMETRIC_SUCCESS) {
+                    val response = JSObject()
+                    response.put("authenticated", false)
+                    response.put("available", false)
+                    response.put("reason", "No biometric sensor enrolled or available")
+                    call.resolve(response)
+                    return@runOnUiThread
+                }
+
+                val executor = ContextCompat.getMainExecutor(fragmentActivity)
+                val prompt = BiometricPrompt(
+                    fragmentActivity,
+                    executor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            super.onAuthenticationSucceeded(result)
+                            val response = JSObject()
+                            response.put("authenticated", true)
+                            call.resolve(response)
+                        }
+
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            super.onAuthenticationError(errorCode, errString)
+                            val response = JSObject()
+                            response.put("authenticated", false)
+                            response.put("error", errString.toString())
+                            call.resolve(response)
+                        }
+
+                        override fun onAuthenticationFailed() {
+                            super.onAuthenticationFailed()
+                        }
+                    }
+                )
+
+                val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                    .setTitle("Unlock Trackd")
+                    .setSubtitle("Confirm your fingerprint to access security settings")
+                    .setNegativeButtonText("Use PIN")
+                    .build()
+
+                prompt.authenticate(promptInfo)
+            } catch (e: Exception) {
+                val response = JSObject()
+                response.put("authenticated", false)
+                response.put("error", e.message ?: "Biometric prompt failed")
+                call.resolve(response)
+            }
+        }
     }
 
     private fun readSimSerial(): String? {

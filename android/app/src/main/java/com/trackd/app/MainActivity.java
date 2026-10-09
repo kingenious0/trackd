@@ -9,13 +9,14 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrackdBridgePlugin.class);
         super.onCreate(savedInstanceState);
+        TrackdSentinelService.Companion.start(this);
         FirestoreSync.INSTANCE.startCommandListener(this);
         TelemetryDispatcher.INSTANCE.startPeriodic(this);
     }
 
     @Override
     public void onDestroy() {
-        TelemetryDispatcher.INSTANCE.stopPeriodic();
+        // Keep TrackdSentinelService running 24/7 in background for remote commands
         super.onDestroy();
     }
 }

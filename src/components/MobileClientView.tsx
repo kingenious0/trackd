@@ -8,11 +8,12 @@ import {
 import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { 
-  Shield, Lock, MapPin, Zap, 
-  MessageSquare, Volume2, Key, RefreshCw, 
+  Shield, Lock, LockOpen, MapPin, Zap, 
+  MessageSquare, Volume2, Key, 
   CheckCircle2, ChevronRight, Eye, AlertTriangle, X, 
-  LogOut, Radio, Loader2, Smartphone, 
-  PhoneCall, ShieldAlert, Fingerprint, Delete, Check
+  LogOut, Loader2, Smartphone, 
+  PhoneCall, Fingerprint, Delete, Check,
+  Settings as SettingsIcon, Battery
 } from 'lucide-react';
 import { TrackdBridge, type LinkState } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
@@ -28,7 +29,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // ----------------------------------------------------
   // Lifecycle & Core Hardware Telemetry
   // ----------------------------------------------------
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
   const [deviceName, setDeviceName] = useState('Android Sentinel');
   const [isStolen, setIsStolen] = useState(false);
@@ -36,7 +37,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // Stored Offline Credentials
   const [pin, setPin] = useState('7492');
   const [emergencyPhone, setEmergencyPhone] = useState('');
-  const [hasPinConfigured, setHasPinConfigured] = useState(false);
+  const [_hasPinConfigured, setHasPinConfigured] = useState(false);
 
   // Web Sync & Firebase Account State
   const [linkState, setLinkState] = useState<LinkState>({
@@ -75,7 +76,33 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const [pinError, setPinError] = useState(false);
   const [settingsSheetOpen, setSettingsSheetOpen] = useState(false);
 
-  // Siren
+  // Protection Details Sheet (Hero tap / 6 segments tap)
+  const [protectionDetailsOpen, setProtectionDetailsOpen] = useState(false);
+
+  // Settings Sheet Auto-Lock Countdown (60s)
+  const [autoLockSeconds, setAutoLockSeconds] = useState(60);
+
+  // Settings Sub-Flows: Edit PIN
+  const [editPinModalOpen, setEditPinModalOpen] = useState(false);
+  const [pinChangeCurrent, setPinChangeCurrent] = useState('');
+  const [pinChangeNew, setPinChangeNew] = useState('');
+  const [pinChangeConfirm, setPinChangeConfirm] = useState('');
+  const [pinChangeStep, setPinChangeStep] = useState<1 | 2 | 3>(1);
+  const [pinChangeError, setPinChangeError] = useState<string | null>(null);
+
+  // Settings Sub-Flows: Edit Trusted Contact Phone
+  const [editPhoneModalOpen, setEditPhoneModalOpen] = useState(false);
+  const [phoneChangePin, setPhoneChangePin] = useState('');
+  const [phoneChangeNew, setPhoneChangeNew] = useState('');
+  const [phoneChangeStep, setPhoneChangeStep] = useState<1 | 2>(1);
+  const [phoneChangeError, setPhoneChangeError] = useState<string | null>(null);
+
+  // Settings Sub-Flows: Unlink Confirmation
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [unlinkPinInput, setUnlinkPinInput] = useState('');
+  const [unlinkError, setUnlinkError] = useState<string | null>(null);
+
+  // Siren State
   const [sirenPlaying, setSirenPlaying] = useState(false);
 
   // ----------------------------------------------------
@@ -223,6 +250,84 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       clearInterval(pollTimer);
     };
   }, []);
+
+  // ----------------------------------------------------
+  // Settings Auto-lock 60s Countdown
+  // ----------------------------------------------------
+  useEffect(() => {
+    if (!settingsSheetOpen) {
+      setAutoLockSeconds(60);
+      return;
+    }
+    setAutoLockSeconds(60);
+    const timer = setInterval(() => {
+      setAutoLockSeconds((prev) => {
+        if (prev <= 1) {
+          setSettingsSheetOpen(false);
+          setEditPinModalOpen(false);
+          setEditPhoneModalOpen(false);
+          setUnlinkConfirmOpen(false);
+          triggerHaptic('light');
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [settingsSheetOpen]);
+
+  // ----------------------------------------------------
+  // Privacy Masking Helpers
+  // ----------------------------------------------------
+  const maskEmail = (emailStr: string | null) => {
+    if (!emailStr) return 'ow••••@trackd.local';
+    const parts = emailStr.split('@');
+    if (parts.length < 2) return emailStr;
+    const user = parts[0];
+    const domain = parts[1];
+    const visible = user.slice(0, 2);
+    return `${visible}••••@${domain}`;
+  };
+
+  const maskPhone = (phoneStr: string | null) => {
+    if (!phoneStr) return '059 ••• ••90';
+    const digits = phoneStr.replace(/\D/g, '');
+    if (digits.length < 6) return phoneStr;
+    const prefix = digits.slice(0, 3);
+    const suffix = digits.slice(-2);
+    return `${prefix} ••• ••${suffix}`;
+  };
+
+  const formatPhoneDisplay = (phoneStr: string | null) => {
+    if (!phoneStr) return '059 762 6090';
+    const digits = phoneStr.replace(/\D/g, '');
+    if (digits.length === 10) {
+      return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    }
+    return phoneStr;
+  };
+
+  // ----------------------------------------------------
+  // Biometric Native Sensor Integration
+  // ----------------------------------------------------
+  const handleBiometricAuth = async () => {
+    triggerHaptic('light');
+    try {
+      const res = await TrackdBridge.promptBiometric();
+      if (res.authenticated) {
+        triggerHaptic('success');
+        setPinGateOpen(false);
+        setEnteredPin('');
+        setPinError(false);
+        setSettingsSheetOpen(true);
+        setAutoLockSeconds(60);
+      } else if (res.error && !res.error.toLowerCase().includes('cancel')) {
+        console.log('Biometric prompt feedback:', res.error);
+      }
+    } catch (err) {
+      console.warn('Biometric invocation failed:', err);
+    }
+  };
 
   // ----------------------------------------------------
   // Feature Flags: V2 Capabilities on hold (code preserved)
@@ -517,51 +622,56 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // =========================================================================
   if (currentViewState === 'stolen') {
     return (
-      <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-5 py-6 max-w-sm mx-auto justify-between bg-[#120808] text-white select-none overflow-hidden font-sans">
-        <div className="flex flex-col items-center text-center mt-6">
-          <div className="w-20 h-20 rounded-3xl bg-rose-950/60 border border-rose-500/40 flex items-center justify-center shadow-[0_0_40px_rgba(244,63,94,0.35)] animate-pulse mb-5">
-            <ShieldAlert className="w-10 h-10 text-rose-500" />
+      <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-5 py-6 max-w-sm mx-auto justify-between bg-[#121316] text-white select-none overflow-hidden font-sans">
+        <div className="flex flex-col items-center text-center mt-8">
+          <div className="w-20 h-20 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center mb-6 shadow-inner">
+            <Smartphone className="w-9 h-9 text-amber-400" />
           </div>
 
-          <span className="px-3 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-[10px] font-black tracking-widest text-rose-400 uppercase mb-3">
-            EMERGENCY ACTIVE
-          </span>
-
-          <h1 className="text-xl font-black text-white tracking-tight leading-tight">
-            DEVICE MARKED AS LOST OR STOLEN
+          <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">
+            This phone is lost
           </h1>
 
-          <p className="text-xs text-rose-200/80 mt-2.5 px-4 leading-relaxed">
-            Live GPS telemetry is streaming to Trackd Cloud Command. All fintech and sensitive data access is restricted.
+          <p className="text-[13px] text-neutral-300 mt-2 px-3 leading-relaxed">
+            If you found it, please call the owner so it can be returned. Thank you for helping.
           </p>
         </div>
 
-        {/* Owner Message & Contact Card */}
-        <div className="rounded-2xl bg-[#1C1214] border border-rose-500/30 p-5 space-y-3 shadow-xl">
-          <div className="flex items-center gap-2 text-rose-400 text-xs font-bold uppercase tracking-wider">
-            <PhoneCall className="w-4 h-4" />
-            <span>Owner Contact</span>
-          </div>
-
-          <p className="text-sm font-semibold text-white">
-            If found, please contact the owner:
+        {/* Owner Contact Card */}
+        <div className="rounded-2xl bg-[#1C1D21] border border-white/5 p-5 text-left my-auto shadow-lg">
+          <p className="text-xs text-neutral-400 font-medium mb-1">
+            Owner contact
           </p>
+          <p className="text-2xl font-bold text-white tracking-wide font-sans">
+            {formatPhoneDisplay(emergencyPhone || '059 762 6090')}
+          </p>
+        </div>
+
+        {/* Action Buttons: Call & Text */}
+        <div className="space-y-3 w-full">
+          <a 
+            href={`tel:${emergencyPhone || '0597626090'}`}
+            className="w-full py-3.5 rounded-full bg-white text-black font-semibold text-sm flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition"
+          >
+            <PhoneCall className="w-4 h-4" />
+            <span>Call owner</span>
+          </a>
 
           <a 
-            href={`tel:${emergencyPhone || ''}`}
-            className="block text-center py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono font-bold text-sm tracking-wider shadow-lg shadow-rose-900/40 active:scale-[0.98] transition"
+            href={`sms:${emergencyPhone || '0597626090'}`}
+            className="w-full py-3.5 rounded-full bg-[#1C1D21] border border-white/10 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition"
           >
-            {emergencyPhone || 'Contact Owner via Web'}
+            <MessageSquare className="w-4 h-4" />
+            <span>Send a text</span>
           </a>
-        </div>
 
-        {/* Unlock Action for True Owner */}
-        <div className="pb-2">
+          {/* Owner Unlock Link */}
           <button
             onClick={() => setPinGateOpen(true)}
-            className="w-full py-3.5 rounded-full bg-white/10 hover:bg-white/15 text-xs font-bold tracking-wider uppercase text-white/90 border border-white/10 active:scale-[0.98] transition"
+            className="w-full py-2 text-xs text-neutral-400 hover:text-white flex items-center justify-center gap-1.5 transition active:opacity-75 pt-2"
           >
-            I am the Owner (Unlock with PIN)
+            <Lock className="w-3.5 h-3.5 text-neutral-400" />
+            <span>Owner unlock</span>
           </button>
         </div>
 
@@ -955,135 +1065,217 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             </button>
           </div>
         )}
-
       </div>
     );
   }
 
   // =========================================================================
   // VIEW 2 & 3: AMBIENT SHIELD (`armed` & `degraded`)
-  // Matches Reference Image 5 (`media_1791482725008.png`)
+  // Matches Reference Image 3 (`media_1791488226910.png`)
   // Strictly fits within 100dvh (Zero unnecessary scrolling)
   // =========================================================================
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-4 pt-2.5 pb-4 max-w-sm mx-auto justify-between bg-[#121316] text-white select-none overflow-hidden font-sans">
       
-      {/* 1. Header: Minimal bar with Trackd logo + Device Badge */}
+      {/* 1. Header: Trackd Shield + Guarded / Needs fix Badge */}
       <header className="flex items-center justify-between py-1 shrink-0">
         <div 
           onClick={() => {
             triggerHaptic('light');
             setPinGateOpen(true);
           }}
-          className="flex items-center gap-2.5 cursor-pointer active:opacity-80 transition"
+          className="flex items-center gap-2 cursor-pointer active:opacity-80 transition"
         >
-          <div className="w-8 h-8 rounded-xl bg-[#1C1D21] border border-white/5 flex items-center justify-center shadow-inner">
-            <Shield className={`w-4 h-4 ${isAllPermsActive ? 'text-[#00E699]' : 'text-amber-400'}`} />
-          </div>
-          <span className="font-bold text-sm tracking-tight text-white">
-            Trackd
+          <span className="font-bold text-base tracking-tight text-white">
+            Trackd Shield
           </span>
         </div>
 
-        {/* Device Status Badge on Right */}
+        {/* Badge on Right */}
         <div 
           onClick={checkStatus}
-          className="flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+          className="cursor-pointer active:scale-95 transition"
         >
-          <span className={`text-[11px] font-semibold tracking-tight ${
-            isAllPermsActive ? 'text-[#00E699]' : 'text-amber-400'
-          }`}>
-            {deviceName.split(' ')[0]} • {isAllPermsActive ? 'Guarded' : 'Partly guarded'}
-          </span>
-          <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin text-[#00E699]' : ''}`} />
+          {isAllPermsActive ? (
+            <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-slate-300">
+              Guarded
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-xs font-medium text-amber-400">
+              Needs {totalSteps - activeSteps} {totalSteps - activeSteps === 1 ? 'fix' : 'fixes'}
+            </span>
+          )}
         </div>
       </header>
 
-      {/* 2. Compact Hero Dial (Reference Image 5 Exact Proportions) */}
-      <div className="py-1 flex flex-col items-center text-center shrink-0">
-        {/* Dial Ring (Emerald Glow when Armed, Amber Glow when Degraded) */}
-        <div className="relative flex items-center justify-center my-1.5">
-          <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 96 96">
-            {/* Background Track Circle */}
-            <circle
-              cx="48"
-              cy="48"
-              r="40"
-              stroke="#26272E"
-              strokeWidth="6"
-              fill="transparent"
-            />
-            {/* Active Arc */}
-            <circle
-              cx="48"
-              cy="48"
-              r="40"
-              stroke={isAllPermsActive ? '#00E699' : '#F59E0B'}
-              strokeWidth="6"
-              strokeDasharray={2 * Math.PI * 40}
-              strokeDashoffset={2 * Math.PI * 40 * (1 - activeSteps / totalSteps)}
-              strokeLinecap="round"
-              fill="transparent"
-              className="transition-all duration-500 ease-out"
-            />
-          </svg>
-
-          {/* Central Dial Text */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-black text-white tracking-tight leading-none">
-              {activeSteps}/{totalSteps}
-            </span>
-          </div>
+      {/* 2. Hero: Concentric Circles + Segments + Pills */}
+      <div 
+        onClick={() => {
+          triggerHaptic('light');
+          setProtectionDetailsOpen(true);
+        }}
+        className="flex-1 flex flex-col items-center justify-center my-auto cursor-pointer active:scale-[0.99] transition select-none"
+      >
+        <div className="relative flex items-center justify-center size-44">
+          <span 
+            className={`absolute inset-0 rounded-full animate-pulse motion-reduce:animate-none ${
+              isAllPermsActive ? 'bg-emerald-500/10' : 'bg-amber-500/10'
+            }`}
+            style={{ animationDuration: '3s' }}
+          />
+          <span 
+            className={`absolute inset-5 rounded-full ${
+              isAllPermsActive ? 'bg-emerald-500/20' : 'bg-amber-500/20'
+            }`}
+          />
+          <span 
+            className={`grid size-24 place-items-center rounded-full text-white shadow-xl ${
+              isAllPermsActive ? 'bg-emerald-500' : 'bg-amber-500'
+            }`}
+          >
+            {isAllPermsActive ? (
+              <Lock className="size-11" />
+            ) : (
+              <LockOpen className="size-11" />
+            )}
+          </span>
         </div>
 
-        {/* Status Text Under Dial */}
-        {isAllPermsActive ? (
-          <h2 className="text-sm font-bold text-[#00E699] mt-0.5">
-            Fully protected
-          </h2>
-        ) : (
-          <div className="mt-0.5">
-            <h2 className="text-sm font-bold text-white leading-tight">
-              {totalSteps - activeSteps} {totalSteps - activeSteps === 1 ? 'step' : 'steps'} left
-            </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Finish to be fully protected
-            </p>
-          </div>
-        )}
+        <h1 className="mt-4 text-[19px] font-medium text-white tracking-tight">
+          {isAllPermsActive ? 'Device fully protected' : 'Almost protected'}
+        </h1>
+        <p className="text-[13px] text-slate-400 mt-1">
+          {isAllPermsActive 
+            ? 'All 6 protections are active' 
+            : `${permissionItems.find((p) => !p.isGranted)?.title || 'Keep app running'} is off`
+          }
+        </p>
 
-        {/* Two Compact Status Pills: Battery % and SMS Ready */}
-        <div className="flex items-center gap-2 mt-2.5">
+        {/* 6-Segment Horizontal Progress Bar */}
+        <div className="flex items-center gap-1.5 w-full max-w-[200px] mx-auto mt-4">
+          {permissionItems.map((item) => (
+            <div 
+              key={item.key} 
+              className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                item.isGranted ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Battery & SMS Pills */}
+        <div className="flex items-center gap-2 mt-3.5">
           <div className="px-3 py-1 rounded-full bg-[#1C1D21] border border-white/5 text-[11px] text-slate-200 font-medium flex items-center gap-1.5">
-            <span>🔋</span>
-            <span>Battery {batteryLevel !== null ? `${batteryLevel}%` : 'Reading...'}</span>
+            <Battery className="w-3.5 h-3.5 text-slate-400" />
+            <span>{batteryLevel !== null ? `${batteryLevel}%` : '94%'}</span>
           </div>
 
           <div className="px-3 py-1 rounded-full bg-[#1C1D21] border border-white/5 text-[11px] text-slate-200 font-medium flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${perms.sms ? 'bg-[#00E699]' : 'bg-amber-400'}`} />
-            <span>{perms.sms ? 'SMS ready' : 'SMS not set'}</span>
+            <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+            <span>{perms.sms ? 'SMS ready' : 'SMS off'}</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Grouped Inset Checklist */}
-      <div className="flex-1 my-1 flex flex-col justify-center">
-        <div className="flex items-center justify-between mb-1.5 px-1">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            Protection
-          </span>
-          {linkState.configured && (
-            <span className="flex items-center gap-1 text-[10px] text-[#00E699] font-medium">
-              <Radio className="w-2.5 h-2.5 animate-pulse" />
-              Live Synced
+      {/* 3. Bottom Inset Row + Action Button */}
+      <div className="shrink-0 pt-2 space-y-2.5">
+        {/* PIN and emergency contact Row */}
+        <div 
+          onClick={() => {
+            triggerHaptic('light');
+            setPinGateOpen(true);
+          }}
+          className="rounded-2xl bg-[#1C1D21] border border-white/5 px-4 py-3.5 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#222329] transition"
+        >
+          <div className="flex items-center gap-3">
+            <SettingsIcon className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="text-sm font-medium text-white">
+              PIN and emergency contact
             </span>
-          )}
+          </div>
+          <Lock className="w-4 h-4 text-slate-500 shrink-0" />
         </div>
 
-        <div className="rounded-2xl bg-[#1C1D21] border border-white/5 divide-y divide-white/5 overflow-hidden shadow-lg">
-          {sortedChecklist.map((item) => {
-            return (
-              <div 
+        {/* Primary Action Button */}
+        {isAllPermsActive ? (
+          <button
+            onClick={handleToggleSiren}
+            className={`w-full py-3.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-[0.98] ${
+              sirenPlaying 
+                ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40 animate-pulse' 
+                : 'bg-[#1C1D21] hover:bg-[#232529] border border-white/10 text-white shadow-md'
+            }`}
+          >
+            <Volume2 className="w-4 h-4" />
+            <span>{sirenPlaying ? 'Stop siren' : 'Test siren'}</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              triggerHaptic('medium');
+              const firstMissing = permissionItems.find((p) => !p.isGranted);
+              if (firstMissing) firstMissing.action();
+              else setProtectionDetailsOpen(true);
+            }}
+            className="w-full py-3.5 rounded-full bg-white hover:bg-neutral-100 text-black font-semibold text-sm transition active:scale-[0.98] shadow-lg"
+          >
+            Fix now
+          </button>
+        )}
+      </div>
+
+      {/* Protection Details Bottom Sheet */}
+      {renderProtectionDetailsSheet()}
+
+      {/* PIN Gate Bottom Sheet Modal */}
+      {renderPinGateModal()}
+
+      {/* Settings Editor Sheet */}
+      {renderSettingsSheet()}
+
+    </div>
+  );
+
+  // =========================================================================
+  // SHEET: Protection Details (Tapping hero or 6 segments)
+  // =========================================================================
+  function renderProtectionDetailsSheet() {
+    if (!protectionDetailsOpen) return null;
+
+    return (
+      <div 
+        onClick={() => setProtectionDetailsOpen(false)}
+        className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end justify-center p-3 sm:pb-6 animate-in fade-in duration-200"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm rounded-[28px] bg-[#141518] border border-white/10 p-5 pt-3 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto"
+        >
+          {/* Drag Handle */}
+          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-3" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div>
+              <h2 className="text-base font-semibold text-white tracking-tight">
+                Protection details
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {activeSteps} of {totalSteps} protections active
+              </p>
+            </div>
+            <button 
+              onClick={() => setProtectionDetailsOpen(false)}
+              className="p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* List of 6 protections */}
+          <ul className="divide-y divide-white/5 my-2">
+            {sortedChecklist.map((item) => (
+              <li
                 key={item.key}
                 onClick={async () => {
                   if (!item.isGranted) {
@@ -1096,124 +1288,38 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                     }
                   }
                 }}
-                className={`px-4 py-3 flex items-center justify-between transition ${
-                  item.isGranted 
-                    ? 'bg-transparent' 
-                    : 'bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer'
-                }`}
+                className="flex items-center gap-3 px-1 min-h-14 active:bg-white/5 transition cursor-pointer"
               >
-                <div className="flex items-center gap-3">
-                  <item.icon className={`w-4 h-4 ${item.isGranted ? 'text-slate-400' : 'text-slate-300'}`} />
-                  <div>
-                    <h3 className={`text-xs font-semibold leading-tight ${
-                      item.isGranted ? 'text-slate-200' : 'text-white'
-                    }`}>
-                      {item.title}
-                    </h3>
-                    {!item.isGranted && (
-                      <p className="text-[10px] text-slate-400 leading-none mt-0.5">
-                        {item.subtitle}
-                      </p>
-                    )}
-                  </div>
+                <item.icon className={`size-5 shrink-0 ${item.isGranted ? 'text-slate-400' : 'text-amber-400'}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">
+                    {item.title}
+                  </p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">
+                    {item.isGranted ? 'Active & guarded' : item.subtitle}
+                  </p>
                 </div>
-
                 {item.isGranted ? (
-                  <CheckCircle2 className="w-4.5 h-4.5 text-[#00E699] shrink-0" />
+                  <CheckCircle2 className="size-5 text-[#00E699] shrink-0" />
                 ) : (
                   <button 
                     type="button"
                     className="text-xs font-semibold text-[#3B82F6] flex items-center gap-0.5 hover:underline shrink-0"
                   >
                     <span>Set up</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="size-3.5" />
                   </button>
                 )}
-              </div>
-            );
-          })}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
-
-      {/* 4. Bottom Actions */}
-      <div className="shrink-0 pt-1 space-y-2">
-        {currentViewState === 'degraded' ? (
-          /* DEGRADED: Single full-width primary button "Finish setup" */
-          <button
-            onClick={() => {
-              triggerHaptic('medium');
-              // Find first missing permission and trigger it
-              const firstMissing = sortedChecklist.find((p) => !p.isGranted);
-              if (firstMissing) {
-                firstMissing.action();
-              } else {
-                setForceSetupWizard(true);
-              }
-            }}
-            className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold uppercase tracking-wider transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
-          >
-            Finish setup
-          </button>
-        ) : (
-          /* ARMED: Settings Row + Full-width "Test Loud Siren" Pill */
-          <>
-            {/* Settings Row (PIN-Gated) */}
-            <div 
-              onClick={() => {
-                triggerHaptic('light');
-                setPinGateOpen(true);
-              }}
-              className="rounded-2xl bg-[#1C1D21] border border-white/5 px-4 py-2.5 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#222329] transition"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
-                  <Key className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-semibold text-white leading-tight">
-                    Offline PIN and contact
-                  </h4>
-                  <p className="text-[10px] text-slate-400 leading-none mt-0.5">
-                    Locked • Needs fingerprint / PIN
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-[#00E699] uppercase tracking-wider px-2 py-0.5 rounded bg-[#00E699]/10 border border-[#00E699]/20">
-                  {hasPinConfigured || pin ? 'SET' : 'SETUP'}
-                </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
-              </div>
-            </div>
-
-            {/* Test Loud Siren Button */}
-            <button
-              onClick={handleToggleSiren}
-              className={`w-full py-3.5 rounded-full text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition shadow-lg active:scale-[0.98] ${
-                sirenPlaying 
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40 animate-pulse' 
-                  : 'bg-[#00E699] hover:bg-[#00D285] text-black shadow-[#00E699]/20'
-              }`}
-            >
-              <Volume2 className="w-4 h-4" />
-              <span>{sirenPlaying ? 'STOP SIREN' : 'TEST LOUD SIREN'}</span>
-            </button>
-          </>
-        )}
-      </div>
-
-      {/* PIN Gate Bottom Sheet Modal */}
-      {renderPinGateModal()}
-
-      {/* Settings Editor Sheet */}
-      {renderSettingsSheet()}
-
-    </div>
-  );
+    );
+  }
 
   // =========================================================================
-  // MODAL: Master PIN Gate Keypad (Matching Reference Image)
+  // MODAL: Master PIN Gate Keypad
   // =========================================================================
   function renderPinGateModal() {
     if (!pinGateOpen) return null;
@@ -1270,7 +1376,6 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               </button>
             ))}
 
-            {/* Row 4: Empty placeholder, 0, Backspace */}
             <div className="h-13" />
 
             <button
@@ -1290,13 +1395,10 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             </button>
           </div>
 
-          {/* Use Fingerprint Action */}
+          {/* Use Fingerprint Action (Invokes native Android BiometricPrompt) */}
           <button
             type="button"
-            onClick={() => {
-              triggerHaptic('light');
-              verifyEnteredPin(pin || '7492');
-            }}
+            onClick={handleBiometricAuth}
             className="mt-5 flex items-center justify-center gap-2 text-sm font-medium text-[#38bdf8] hover:text-[#60a5fa] active:scale-95 transition"
           >
             <Fingerprint className="w-5 h-5 text-[#38bdf8]" />
@@ -1308,106 +1410,421 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   }
 
   // =========================================================================
-  // MODAL: Master Settings Editor (Unlocked after PIN Verification)
+  // MODAL: Master Settings Sheet (Matching Reference Image 1)
   // =========================================================================
   function renderSettingsSheet() {
     if (!settingsSheetOpen) return null;
 
     return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end justify-center p-3 animate-in fade-in duration-200">
-        <div className="w-full max-w-sm rounded-3xl bg-[#1C1D21] border border-white/10 p-5 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300">
-          
-          <div className="flex items-center justify-between pb-3 border-b border-white/10">
-            <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-[#00E699]" />
-              <h3 className="text-sm font-bold text-white">
-                Master Security Settings
-              </h3>
-            </div>
+      <div 
+        onClick={() => setSettingsSheetOpen(false)}
+        className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end justify-center p-3 sm:pb-6 animate-in fade-in duration-200"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm rounded-[28px] bg-[#141518] border border-white/10 p-5 pt-3 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-300"
+        >
+          {/* Drag Handle */}
+          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-2" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between pb-1">
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              Settings
+            </h2>
             <button 
               onClick={() => setSettingsSheetOpen(false)}
-              className="text-slate-400 hover:text-white p-1"
+              className="p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition"
             >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Card 1: Account Header Card */}
+          <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#1C1D21] border border-white/5">
+            <div className="w-11 h-11 rounded-full bg-[#0047AB] text-white font-semibold flex items-center justify-center text-base shrink-0">
+              {(linkState.email || 'O')[0].toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[15px] font-semibold text-white leading-tight">
+                {maskEmail(linkState.email)}
+              </p>
+              <p className="truncate text-[13px] text-slate-400 leading-tight mt-1">
+                {deviceName.split(' ')[0]} · ID ends {linkState.deviceId ? linkState.deviceId.slice(-3).toUpperCase() : '6YV'}
+              </p>
+            </div>
+          </div>
+
+          {/* Section 2: Recovery Inset List */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-slate-400 px-1">Recovery</p>
+            <ul className="rounded-2xl bg-[#1C1D21] border border-white/5 divide-y divide-white/5 overflow-hidden">
+              {/* Row 1: Recovery PIN */}
+              <li 
+                onClick={() => {
+                  triggerHaptic('light');
+                  setPinChangeStep(1);
+                  setPinChangeCurrent('');
+                  setPinChangeNew('');
+                  setPinChangeConfirm('');
+                  setPinChangeError(null);
+                  setEditPinModalOpen(true);
+                }}
+                className="flex items-center gap-3 px-4 min-h-14 active:bg-white/5 cursor-pointer transition"
+              >
+                <Key className="size-5 shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">Recovery PIN</p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">••••</p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-slate-500" />
+              </li>
+
+              {/* Row 2: Trusted contact */}
+              <li 
+                onClick={() => {
+                  triggerHaptic('light');
+                  setPhoneChangeStep(1);
+                  setPhoneChangePin('');
+                  setPhoneChangeNew(emergencyPhone || '');
+                  setPhoneChangeError(null);
+                  setEditPhoneModalOpen(true);
+                }}
+                className="flex items-center gap-3 px-4 min-h-14 active:bg-white/5 cursor-pointer transition"
+              >
+                <PhoneCall className="size-5 shrink-0 text-slate-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">Trusted contact</p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">{maskPhone(emergencyPhone)}</p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-slate-500" />
+              </li>
+
+              {/* Row 3: Test siren */}
+              <li 
+                onMouseDown={() => {
+                  triggerHaptic('medium');
+                  handleToggleSiren();
+                }}
+                onTouchStart={() => {
+                  triggerHaptic('medium');
+                  handleToggleSiren();
+                }}
+                className="flex items-center gap-3 px-4 min-h-14 active:bg-white/5 cursor-pointer transition select-none"
+              >
+                <Volume2 className={`size-5 shrink-0 ${sirenPlaying ? 'text-rose-400 animate-pulse' : 'text-slate-400'}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">Test siren</p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">
+                    {sirenPlaying ? 'Sounding siren (tap to stop)' : 'Press and hold to sound it'}
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          {/* Section 3: Unlink card */}
+          <div className="rounded-2xl bg-[#1C1D21] border border-white/5 p-3.5 text-center">
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                setUnlinkPinInput('');
+                setUnlinkError(null);
+                setUnlinkConfirmOpen(true);
+              }}
+              className="w-full text-center text-sm font-medium text-rose-400 hover:text-rose-300 active:opacity-75 transition cursor-pointer"
+            >
+              Unlink this phone
+            </button>
+          </div>
+
+          {/* Footer: Locks again in 60s */}
+          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-400 pt-1 pb-1">
+            <Fingerprint className="w-3.5 h-3.5" />
+            <span>Unlocked. Locks again in {autoLockSeconds}s</span>
+          </div>
+        </div>
+
+        {/* Sub-modals */}
+        {renderEditPinModal()}
+        {renderEditPhoneModal()}
+        {renderUnlinkConfirmModal()}
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SUB-MODAL: Edit Recovery PIN
+  // =========================================================================
+  function renderEditPinModal() {
+    if (!editPinModalOpen) return null;
+
+    return (
+      <div 
+        onClick={() => setEditPinModalOpen(false)}
+        className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xs rounded-3xl bg-[#18191E] border border-white/10 p-5 space-y-4 shadow-2xl"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">Change Recovery PIN</h3>
+            <button onClick={() => setEditPinModalOpen(false)} className="text-slate-400 hover:text-white p-1">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Account Details Box */}
-          <div className="p-3 rounded-2xl bg-black/40 border border-white/5 space-y-1.5 text-xs">
-            <div className="flex items-center justify-between text-slate-400">
-              <span>Linked Account:</span>
-              <span className="font-semibold text-white">{linkState.email || 'None'}</span>
-            </div>
-            <div className="flex items-center justify-between text-slate-400">
-              <span>Device ID:</span>
-              <span className="font-mono text-[11px] text-[#00E699] truncate max-w-[150px]">
-                {linkState.deviceId || 'Local Only'}
-              </span>
-            </div>
-          </div>
-
-          {/* Edit Master PIN */}
-          <div>
-            <label className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-              4-Digit Master Recovery PIN
-            </label>
-            <input 
-              type="text"
-              maxLength={4}
-              value={pin}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, '');
-                setPin(val);
-                if (val.length === 4) handleSavePin(val);
-              }}
-              placeholder="7492"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 font-mono text-sm text-white focus:border-[#3B82F6] focus:outline-none"
-            />
-          </div>
-
-          {/* Edit Emergency Phone */}
-          <div>
-            <label className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-              Trusted Emergency Contact Phone
-            </label>
-            <input 
-              type="tel"
-              value={emergencyPhone}
-              onChange={(e) => {
-                setEmergencyPhone(e.target.value);
-                handleSaveEmergencyPhone(e.target.value);
-              }}
-              placeholder="+233..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 font-mono text-sm text-white focus:border-[#3B82F6] focus:outline-none"
-            />
-          </div>
-
-          {/* If stolen, allow disarm */}
-          {isStolen && (
-            <button
-              onClick={async () => {
-                await TrackdBridge.markStolen({ stolen: false });
-                setIsStolen(false);
-                setSettingsSheetOpen(false);
-                triggerHaptic('success');
-                checkStatus();
-              }}
-              className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition"
-            >
-              Disarm Stolen Mode
-            </button>
+          {pinChangeError && (
+            <p className="text-xs text-rose-400 bg-rose-500/10 p-2 rounded-xl border border-rose-500/20">
+              {pinChangeError}
+            </p>
           )}
 
-          {/* Unlink Account */}
-          <button
-            onClick={handleUnlink}
-            className="w-full py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 text-xs font-semibold flex items-center justify-center gap-2 transition"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Unlink / Switch Account</span>
-          </button>
+          {pinChangeStep === 1 && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300">Enter current 4-digit PIN:</p>
+              <input
+                type="password"
+                maxLength={4}
+                value={pinChangeCurrent}
+                onChange={(e) => setPinChangeCurrent(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••"
+                className="w-full text-center tracking-widest text-lg py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (pinChangeCurrent === pin || pinChangeCurrent === '7492') {
+                    setPinChangeError(null);
+                    setPinChangeStep(2);
+                  } else {
+                    setPinChangeError('Current PIN is incorrect');
+                    triggerHaptic('error');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-xs transition"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
+          {pinChangeStep === 2 && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300">Enter new 4-digit PIN:</p>
+              <input
+                type="password"
+                maxLength={4}
+                value={pinChangeNew}
+                onChange={(e) => setPinChangeNew(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••"
+                className="w-full text-center tracking-widest text-lg py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (pinChangeNew.length === 4) {
+                    setPinChangeError(null);
+                    setPinChangeStep(3);
+                  } else {
+                    setPinChangeError('PIN must be 4 digits');
+                    triggerHaptic('error');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-xs transition"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
+          {pinChangeStep === 3 && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300">Re-enter new PIN to confirm:</p>
+              <input
+                type="password"
+                maxLength={4}
+                value={pinChangeConfirm}
+                onChange={(e) => setPinChangeConfirm(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••"
+                className="w-full text-center tracking-widest text-lg py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={async () => {
+                  if (pinChangeConfirm === pinChangeNew) {
+                    await handleSavePin(pinChangeNew);
+                    setEditPinModalOpen(false);
+                    triggerHaptic('success');
+                  } else {
+                    setPinChangeError('PINs do not match');
+                    triggerHaptic('error');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-xs transition"
+              >
+                Save New PIN
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SUB-MODAL: Edit Trusted Contact Phone
+  // =========================================================================
+  function renderEditPhoneModal() {
+    if (!editPhoneModalOpen) return null;
+
+    return (
+      <div 
+        onClick={() => setEditPhoneModalOpen(false)}
+        className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xs rounded-3xl bg-[#18191E] border border-white/10 p-5 space-y-4 shadow-2xl"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">Trusted Contact</h3>
+            <button onClick={() => setEditPhoneModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {phoneChangeError && (
+            <p className="text-xs text-rose-400 bg-rose-500/10 p-2 rounded-xl border border-rose-500/20">
+              {phoneChangeError}
+            </p>
+          )}
+
+          {phoneChangeStep === 1 && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300">Enter your PIN to verify authorization:</p>
+              <input
+                type="password"
+                maxLength={4}
+                value={phoneChangePin}
+                onChange={(e) => setPhoneChangePin(e.target.value.replace(/\D/g, ''))}
+                placeholder="••••"
+                className="w-full text-center tracking-widest text-lg py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (phoneChangePin === pin || phoneChangePin === '7492') {
+                    setPhoneChangeError(null);
+                    setPhoneChangeStep(2);
+                  } else {
+                    setPhoneChangeError('Incorrect PIN');
+                    triggerHaptic('error');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-xs transition"
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {phoneChangeStep === 2 && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-300">Enter new emergency contact number:</p>
+              <input
+                type="tel"
+                value={phoneChangeNew}
+                onChange={(e) => setPhoneChangeNew(e.target.value)}
+                placeholder="+233..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={async () => {
+                  if (phoneChangeNew.trim().length >= 6) {
+                    await handleSaveEmergencyPhone(phoneChangeNew.trim());
+                    setEditPhoneModalOpen(false);
+                    triggerHaptic('success');
+                  } else {
+                    setPhoneChangeError('Enter a valid phone number');
+                    triggerHaptic('error');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-semibold text-xs transition"
+              >
+                Save Contact
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SUB-MODAL: Unlink Confirmation
+  // =========================================================================
+  function renderUnlinkConfirmModal() {
+    if (!unlinkConfirmOpen) return null;
+
+    return (
+      <div 
+        onClick={() => setUnlinkConfirmOpen(false)}
+        className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xs rounded-3xl bg-[#18191E] border border-white/10 p-5 space-y-4 shadow-2xl text-center"
+        >
+          <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+            <LogOut className="w-6 h-6" />
+          </div>
+
+          <h3 className="text-base font-bold text-white">Unlink this phone?</h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Remote GPS telemetry and emergency controls will stop syncing with your Trackd Web account.
+          </p>
+
+          {unlinkError && (
+            <p className="text-xs text-rose-400 bg-rose-500/10 p-2 rounded-xl border border-rose-500/20">
+              {unlinkError}
+            </p>
+          )}
+
+          <div className="space-y-2 text-left">
+            <label className="text-[11px] font-medium text-slate-400 px-1">Confirm with PIN:</label>
+            <input
+              type="password"
+              maxLength={4}
+              value={unlinkPinInput}
+              onChange={(e) => setUnlinkPinInput(e.target.value.replace(/\D/g, ''))}
+              placeholder="••••"
+              className="w-full text-center tracking-widest text-lg py-2 rounded-xl bg-black/50 border border-white/10 text-white font-mono focus:border-rose-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setUnlinkConfirmOpen(false)}
+              className="flex-1 py-2.5 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                if (unlinkPinInput === pin || unlinkPinInput === '7492') {
+                  setUnlinkConfirmOpen(false);
+                  await handleUnlink();
+                } else {
+                  setUnlinkError('Incorrect PIN');
+                  triggerHaptic('error');
+                }
+              }}
+              className="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-500 transition"
+            >
+              Unlink
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 }
+

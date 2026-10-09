@@ -100,7 +100,16 @@ object FirestoreSync {
             return
         }
         if (FirebaseAuth.getInstance().currentUser == null) {
-            Log.w(TAG, "not signed in; listener not started")
+            Log.w(TAG, "not signed in yet; registering auth state listener to attach when ready")
+            FirebaseAuth.getInstance().addAuthStateListener { auth ->
+                if (auth.currentUser != null && registration == null) {
+                    val currentDevId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
+                    if (!currentDevId.isNullOrBlank()) {
+                        Log.i(TAG, "auth state restored; attaching command listener now")
+                        startCommandListener(context)
+                    }
+                }
+            }
             return
         }
 

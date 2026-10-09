@@ -206,10 +206,10 @@ The native Android APK (`com.trackd.app`) implements a robust 4-state lifecycle 
                                   v
                     +-----------------------------+
                     |       4. STOLEN STATE       |
-                    |  - Crimson Emergency Beacon |
-                    |  - Live GPS Stream to Web   |
-                    |  - Financial App Decoy Trap |
-                    |  - Owner PIN Unlock Gate    |
+                    |  - Calm Warm Amber Card     |
+                    |  - Clear Owner Contact      |
+                    |  - Call & Text Action Pills |
+                    |  - Subtle Owner Unlock Link |
                     +-----------------------------+
 ```
 
@@ -217,44 +217,39 @@ The native Android APK (`com.trackd.app`) implements a robust 4-state lifecycle 
 
 ```
 +-------------------------------------------------------+
-|  [🛡️]  Trackd                     Redmi • Guarded [🔄]|
+|  Trackd Shield                       Guarded [●]      |
 |                                                       |
-|                     .--------.                        |
-|                    /   6/6    \                       |
-|                   |  PROTECTED |                      |
-|                    \          /                       |
-|                     '--------'                        |
-|                   Fully protected                     |
+|                    . - - - - .                        |
+|                  /     .-.     \                      |
+|                 |     | 🔒 |    |                     |
+|                  \     '-'     /                      |
+|                    ' - - - - '                        |
+|                  Fully protected                      |
 |                                                       |
-|          [ 🔋 Battery 77% ]     [ ● SMS ready ]       |
+|  [================ 6/6 Segment Bar =================] |
 |                                                       |
-|  PROTECTION                              ((•)) Live Synced
-|  +-------------------------------------------------+  |
-|  | [📍] Always-on location                     [✓] |  |
-|  | [💬] Find phone offline                     [✓] |  |
-|  | [🔒] Remote lock and erase                  [✓] |  |
-|  | [⚡] Keep app running                       [✓] |  |
-|  | [⚠️] Prevent power off                      [✓] |  |
-|  | [👁️] Lock screen message                   [✓] |  |
-|  +-------------------------------------------------+  |
+|          [ 🔋 Battery 94% ]     [ ● SMS ready ]       |
 |                                                       |
 |  +-------------------------------------------------+  |
-|  | [🔑] Offline PIN & contact   Locked • Needs PIN [>] |
+|  | [🔑] PIN and emergency contact        ••••  [>] |  |
 |  +-------------------------------------------------+  |
 |                                                       |
-|  [         🔊 TEST LOUD SIREN (EMERALD PILL)       ]  |
+|  [         🔊 TEST SIREN / FIX NOW (FULL PILL)      ]  |
 +-------------------------------------------------------+
 ```
 
 | UI Element | Functionality & Real Hardware Integration |
 | :--- | :--- |
-| **Top Header Bar** | Minimal obsidian bar displaying "Trackd" shield and live hardware model (`Build.MODEL`) with real-time state badge (`Guarded` in emerald or `Partly guarded` in amber). |
-| **Central Hero Dial** | Dynamic SVG progress ring. Displays emerald ring at 6/6 coverage, or amber segmented arc when degraded. |
-| **Hardware Telemetry Pills** | **100% Real OS Ground Truth**: Live battery reading via `BatteryManager`, real telephony SMS provider status, and live Firestore sync status. |
-| **Dynamic Inset Checklist** | Grouped card of 6 native protections. In `degraded` mode, ungranted permissions float to the top with a blue "Set up >" button. |
-| **Master PIN Keypad Gate** | Sleek slide-up numeric bottom sheet (1–9, fingerprint, 0, backspace, 4 dots) requiring Master PIN before revealing emergency credentials. |
-| **Step-by-Step Onboarding** | Step 1 (Firebase Auth), Step 2 (Device naming), Step 3 (Master PIN), Step 4 (Trusted phone), and Steps 5–6 (Progressive permission elevation). |
-| **Test Loud Siren** | Vibrates phone with `@capacitor/haptics`, sounds 100% max volume alarm via `HardwareAlarm.kt`, and auto-stops after 5 seconds. |
+| **Top Header Bar** | Minimal obsidian bar displaying "Trackd Shield" and state badge (`Guarded` in emerald or `Partly guarded` in amber). Tapping "Trackd Shield" prompts the Master PIN keypad. |
+| **Concentric Pulse Lock Hero** | Calm geometric hero with subtle outer ring breathing pulse (`Lock` in emerald when fully guarded, `LockOpen` in amber with gap count when degraded). Tapping hero opens the "Protection Details" bottom sheet. |
+| **6-Segment Status Bar** | Visual breakdown representing the 6 hardware security layers. Tapping the bar opens the "Protection Details" sheet. |
+| **Hardware Telemetry Pills** | **100% Real OS Ground Truth**: Live battery reading via `BatteryManager`, real telephony SMS ready status, and live Firestore connection status. |
+| **Protection Details Bottom Sheet** | Slide-up modal displaying the 6 hardware protections (`Always-on location`, `Find phone offline`, `Remote lock and erase (V2)`, `Keep app running`, `Prevent power off`, `Lock screen message`) with direct deep-links to system settings. |
+| **PIN and Emergency Contact Row** | Shows masked recovery credentials (`••••`). Tapping prompts Master PIN or Biometric Fingerprint to open the Inset Settings Sheet. |
+| **Biometric Fingerprint Authentication** | Deeply integrated via AndroidX `BiometricPrompt`. Tapping "Use fingerprint" invokes the native Android biometric dialog, allowing owners to verify with fingerprint or face recognition. |
+| **Settings Inset Sheet** | Clean 3-section inset menu: Account header card with masked email & hardware ID, Recovery section (change PIN, update contact number, test siren), and Unlink card with PIN confirmation. Auto-locks after 60 seconds with live countdown indicator. |
+| **Calm Warm Amber Lost Screen** | Replaces aggressive warning screens with a calm, high-legibility amber card stating "This phone is lost" with the owner's emergency contact, one-tap "Call owner" and "Send a text" action pills, and a subtle "Owner unlock" link. |
+| **Background Sentinel Service** | Native `TrackdSentinelService` runs persistently in the background. Even if the user swipes Trackd from recent apps or powers off, `AlarmManager` and `onTaskRemoved()` automatically restart the listener, allowing remote sirens and commands from the web console to execute instantly when closed. |
 
 ---
 

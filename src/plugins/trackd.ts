@@ -66,6 +66,7 @@ export interface TrackdBridgePlugin {
   requestIgnoreBatteryOptimization(): Promise<void>;
   testHardwareSiren(options?: { durationMs?: number }): Promise<{ playing: boolean }>;
   stopHardwareSiren(): Promise<{ stopped: boolean }>;
+  promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }>;
 }
 
 export interface PermissionStatus {
@@ -169,6 +170,9 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   }
   async stopHardwareSiren(): Promise<{ stopped: boolean }> {
     return { stopped: true };
+  }
+  async promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }> {
+    return { authenticated: true };
   }
 }
 
