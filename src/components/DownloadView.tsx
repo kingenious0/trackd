@@ -17,7 +17,7 @@ interface DownloadViewProps {
   onSwitchToLogin: () => void;
 }
 
-const SHA256_HASH = '4fbb8dd2c0087c0d61eb9273f5ad9779c5faf1343fab3d5ca5add9bd2b40d5d7';
+const SHA256_HASH = '1818696be2ec53aac6410bb17f6319b1e988d14a95149678b926ecdcbbd82e1c';
 
 export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   const [copiedHash, setCopiedHash] = useState(false);
@@ -124,7 +124,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Download Action Button */}
               <a
                 href="/downloads/trackd-latest.apk"
-                download="trackd-v1.0.0.apk"
+                download="trackd-v1.1.0.apk"
                 className="mt-5 w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-blue-600/25 border border-blue-400/20"
               >
                 <Download className="w-4 h-4 text-white" />
@@ -132,10 +132,12 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               </a>
 
               {/* Version & Checksum Meta */}
-              <div className="mt-3.5 flex items-center justify-center gap-2 text-[11px] text-neutral-400">
-                <span className="font-mono text-white/80">v1.0.0</span>
+              <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-neutral-400">
+                <span className="font-mono text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  v1.1.0 Latest
+                </span>
                 <span>•</span>
-                <span>22.3 MB</span>
+                <span>Updated Oct 2026</span>
                 <span>•</span>
                 <button
                   type="button"
@@ -152,6 +154,15 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
                     <Copy className="w-3 h-3 text-neutral-400" />
                   )}
                 </button>
+              </div>
+
+              {/* What's New Pill in Card */}
+              <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
+                <span className="text-[10px] uppercase tracking-wider text-blue-400 font-bold block">What&apos;s New in v1.1.0</span>
+                <p className="text-neutral-400 text-[11px] leading-snug">
+                  ✨ Automatic SIM swap SMS alert with thief&apos;s phone number & live GPS coordinates.<br/>
+                  ✨ Real-time SIM ejection / tray open telemetry dispatch.
+                </p>
               </div>
             </div>
           </div>

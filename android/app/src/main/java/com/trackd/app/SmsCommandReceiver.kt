@@ -262,9 +262,10 @@ class SmsCommandReceiver : BroadcastReceiver() {
 
     private fun parseCommand(body: String): Pair<String, String>? {
         val clean = body.trim()
-        val match = Regex("^#(LOCATE|SIREN|STOP_SIREN|SILENCE|STOLEN|SAFE|WIPE)#\\s*(\\S{4,12})\\s*$", RegexOption.IGNORE_CASE)
+        val match = Regex("^#(LOCATE|SIREN|STOP_SIREN|SILENCE|STOLEN|SAFE|WIPE)#\\s*\\[?(\\S{4,12})\\]?\\s*$", RegexOption.IGNORE_CASE)
             .matchEntire(clean) ?: return null
-        return match.groupValues[1].uppercase() to match.groupValues[2].trim()
+        val pin = match.groupValues[2].trim().removeSurrounding("[", "]")
+        return match.groupValues[1].uppercase() to pin
     }
 
     private fun pinMatches(context: Context, pin: String): Boolean {

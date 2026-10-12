@@ -588,25 +588,35 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                 <div className="space-y-2 pt-2">
                   <span className="text-[10px] text-slate-500 font-mono block">Zero internet required · Send directly to handset</span>
                   {[
-                    { label: 'Force Location Fix', code: '#LOCATE#[PIN]' },
-                    { label: 'Trigger Sound Siren', code: '#SIREN#[PIN]' },
-                    { label: 'Engage Theft Lock', code: '#STOLEN#[PIN]' },
-                    { label: 'Disarm Theft Lock', code: '#SAFE#[PIN]' }
+                    { label: 'Force Location Fix', code: '#LOCATE#PIN', template: '#LOCATE#' },
+                    { label: 'Trigger Sound Siren', code: '#SIREN#PIN', template: '#SIREN#' },
+                    { label: 'Silence Siren', code: '#SILENCE#PIN', template: '#SILENCE#' },
+                    { label: 'Engage Theft Lock', code: '#STOLEN#PIN', template: '#STOLEN#' },
+                    { label: 'Disarm Theft Lock', code: '#SAFE#PIN', template: '#SAFE#' }
                   ].map((sms, i) => (
                     <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs font-mono">
                       <div>
                         <span className="text-slate-400 text-[10px] block">{sms.label}</span>
-                        <span className="text-blue-400 font-bold">{sms.code}</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="text-blue-400 font-bold">{sms.template}</span>
+                          <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1 py-0.5 rounded text-[11px]">YOUR_PIN</span>
+                        </div>
                       </div>
                       <button 
                         onClick={() => copySms(sms.code)}
-                        className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
-                        title="Copy SMS command"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition bg-white/[0.04] border border-white/5 text-[11px]"
+                        title="Copy command template"
                       >
                         {copiedCode === sms.code ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400 text-[10px] font-sans">Copied!</span>
+                          </>
                         ) : (
-                          <Copy className="w-3.5 h-3.5" />
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span className="text-[10px] font-sans">Copy</span>
+                          </>
                         )}
                       </button>
                     </div>
