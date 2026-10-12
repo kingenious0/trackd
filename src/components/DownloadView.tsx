@@ -159,10 +159,10 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* What's New Pill in Card */}
               <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
                 <span className="text-[10px] uppercase tracking-wider text-blue-400 font-bold block">What&apos;s New in v1.1.0</span>
-                <p className="text-neutral-400 text-[11px] leading-snug">
-                  ✨ Automatic SIM swap SMS alert with thief&apos;s phone number & live GPS coordinates.<br/>
-                  ✨ Real-time SIM ejection / tray open telemetry dispatch.
-                </p>
+                <ul className="text-neutral-400 text-[11px] leading-snug space-y-0.5 list-disc list-inside">
+                  <li>Automatic SIM swap SMS alert with new phone number & live GPS.</li>
+                  <li>Real-time SIM card removal and slot open telemetry dispatch.</li>
+                </ul>
               </div>
             </div>
           </div>
