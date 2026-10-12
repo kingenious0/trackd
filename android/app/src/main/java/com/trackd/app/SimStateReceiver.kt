@@ -26,46 +26,33 @@ class SimStateReceiver : BroadcastReceiver() {
         }
 
         val simState = intent.extras?.get("simstate")?.toString()
-        if (simState != null && simState != "READY" && simState != "LOADED" && simState != "5") return
+            ?: intent.getStringExtra("ss")
 
-        val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        val currentSerial = try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                telephony.simSerialNumber
-            } else {
-                null
-            }
-        } catch (security: SecurityException) {
-            null
-        }
-
-        if (currentSerial.isNullOrBlank()) return
-
-        val cached = AegisState.getString(context, AegisState.KEY_REGISTERED_SIM)
-        if (cached == null) {
-            AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentSerial)
-            Log.i(TAG, "baseline SIM serial cached")
+        // Handle SIM removal / absent state
+        if (simState == "ABSENT" || simState == "1") {
+            Log.w(TAG, "SIM card removed or tray opened (ABSENT)")
+            // Telemetry dispatcher sends over Wi-Fi if available
+            TelemetryDispatcher.sendNow(context, "SIM_REMOVED")
             return
         }
 
-        if (cached == currentSerial) return
+        if (simState != null && simState != "READY" && simState != "LOADED" && simState != "5") return
+
+        val currentFingerprint = SimHelper.getSimFingerprint(context)
+        if (currentFingerprint.isNullOrBlank()) return
+
+        val cached = AegisState.getString(context, AegisState.KEY_REGISTERED_SIM)
+        if (cached == null) {
+            AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentFingerprint)
+            Log.i(TAG, "baseline SIM fingerprint cached")
+            return
+        }
+
+        if (cached == currentFingerprint) return
         Log.w(TAG, "SIM swap detected")
 
-        val line = try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_NUMBERS) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                telephony.line1Number
-            } else {
-                null
-            }
-        } catch (security: SecurityException) {
-            null
-        } ?: "unknown"
-
-        AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentSerial)
+        val line = SimHelper.getLine1Number(context)
+        AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentFingerprint)
         dispatchAlert(context, line)
     }
 
@@ -115,9 +102,15 @@ class SimStateReceiver : BroadcastReceiver() {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun sendSms(context: Context, phone: String, message: String) {
         try {
-            SmsManager.getDefault().sendTextMessage(phone, null, message, null, null)
+            val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                context.getSystemService(SmsManager::class.java) ?: SmsManager.getDefault()
+            } else {
+                SmsManager.getDefault()
+            }
+            smsManager.sendTextMessage(phone, null, message, null, null)
             Log.i(TAG, "SIM swap alert dispatched")
         } catch (error: Exception) {
             Log.e(TAG, "SIM alert failed", error)

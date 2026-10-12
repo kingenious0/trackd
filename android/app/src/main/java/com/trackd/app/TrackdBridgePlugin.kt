@@ -489,19 +489,7 @@ class TrackdBridgePlugin : Plugin() {
     }
 
     private fun readSimSerial(): String? {
-        return try {
-            if (context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) ==
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                val telephony =
-                    context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-                telephony.simSerialNumber
-            } else {
-                null
-            }
-        } catch (security: SecurityException) {
-            null
-        }
+        return SimHelper.getSimFingerprint(context)
     }
 
     private fun isDecoyServiceEnabled(): Boolean {
