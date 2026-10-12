@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USTED Nav - Official Campus Printable QR Posters</title>
+  <!-- QRCode.js standalone library for crisp vector/canvas rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700&display=swap');
+
+    :root {
+      --primary: #1d4ed8;
+      --primary-dark: #0f172a;
+      --accent: #0284c7;
+      --bg-slate: #f8fafc;
+      --border-dark: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0b0f19;
+      color: #0f172a;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Web Toolbar (Hidden when printed) */
+    .toolbar {
+      width: 100%;
+      max-width: 840px;
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 16px 24px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+    }
+
+    .toolbar h2 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #38bdf8;
+    }
+
+    .toolbar p {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: #f1f5f9;
+    }
+
+    /* Print sheet container */
+    .sheet-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+      align-items: center;
+    }
+
+    /* Standard A4 Poster Styling */
+    .poster-sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      padding: 16mm 18mm;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      border: 3px solid #0f172a;
+      border-radius: 12px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+      page-break-after: always;
+      overflow: hidden;
+    }
+
+    /* Subtle print margin cutlines */
+    .corner-mark {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-color: #94a3b8;
+      border-style: solid;
+      pointer-events: none;
+    }
+    .top-left { top: 6mm; left: 6mm; border-width: 2px 0 0 2px; }
+    .top-right { top: 6mm; right: 6mm; border-width: 2px 2px 0 0; }
+    .bottom-left { bottom: 6mm; left: 6mm; border-width: 0 0 2px 2px; }
+    .bottom-right { bottom: 6mm; right: 6mm; border-width: 0 2px 2px 0; }
+
+    /* Header Badge */
+    .poster-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 3px solid #0f172a;
+      padding-bottom: 12px;
+    }
+
+    .campus-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-box {
+      width: 44px;
+      height: 44px;
+      background: #0f172a;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 900;
+      font-size: 22px;
+    }
+
+    .brand-name {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+      color: #0f172a;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+
+    .location-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      background: #e2e8f0;
+      padding: 6px 12px;
+      border-radius: 6px;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+
+    /* Hook / Headline Area */
+    .poster-hero {
+      text-align: center;
+      margin: 20px 0 10px;
+    }
+
+    .poster-badge-pill {
+      display: inline-block;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-weight: 800;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 4px 14px;
+      border-radius: 9999px;
+      border: 1.5px solid #f87171;
+      margin-bottom: 14px;
+    }
+
+    .poster-headline {
+      font-size: 38px;
+      line-height: 1.1;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      color: #0f172a;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .poster-subheadline {
+      font-size: 17px;
+      font-weight: 600;
+      color: #475569;
+      max-width: 500px;
+      margin: 0 auto;
+      line-height: 1.35;
+    }
+
+    /* Main QR Display Section */
+    .qr-container-card {
+      background: #f8fafc;
+      border: 3.5px dashed #0f172a;
+      border-radius: 24px;
+      padding: 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 12px 0;
+    }
+
+    .qr-frame {
+      background: white;
+      padding: 16px;
+      border-radius: 18px;
+      border: 3px solid #0f172a;
+      box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.15);
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .qr-code-box {
+      width: 220px;
+      height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .scan-cta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #0f172a;
+      color: white;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 8px 22px;
+      border-radius: 9999px;
+    }
+
+    .camera-icon {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    /* 3 Value Pillars */
+    .poster-benefits {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin: 10px 0;
+    }
+
+    .benefit-item {
+      background: #f1f5f9;
+      border-left: 4px solid #0284c7;
+      padding: 10px 12px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .benefit-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    .benefit-desc {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      margin-top: 2px;
+      line-height: 1.25;
+    }
+
+    /* Footer Callout */
+    .poster-footer {
+      border-top: 3px solid #0f172a;
+      padding-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .footer-main-url {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 800;
+      color: #0284c7;
+      letter-spacing: -0.02em;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-no-app {
+      background: #dcfce7;
+      color: #166534;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1.5px solid #86efac;
+      padding: 6px 14px;
+      border-radius: 8px;
+      text-transform: uppercase;
+    }
+
+    /* Print Specific Styles */
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .toolbar {
+        display: none !important;
+      }
+
+      .sheet-wrapper {
+        gap: 0;
+      }
+
+      .poster-sheet {
+        margin: 0;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        width: 100vw;
+        height: 100vh;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Web View Interactive Controls -->
+  <div class="toolbar">
+    <div>
+      <h2>USTED Nav — Campus Campaign Posters (3 Targeted Variants)</h2>
+      <p>Formatted for standard A4 printing. QR codes include unique Google Analytics UTM location tags.</p>
+    </div>
+    <div class="toolbar-actions">
+      <button class="btn btn-secondary" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">Top</button>
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Print All Posters (A4)</button>
+    </div>
+  </div>
+
+  <div class="sheet-wrapper">
+
+    <!-- ========================================== -->
+    <!-- POSTER 1: LECTURE HALLS & EXAM BLOCKS      -->
+    <!-- ========================================== -->
+    <div class="poster-sheet" id="poster-halls">
+      <div class="corner-mark top-left"></div>
+      <div class="corner-mark top-right"></div>
+      <div class="corner-mark bottom-left"></div>
+      <div class="corner-mark bottom-right"></div>
+
+      <header class="poster-header">
+        <div class="campus-badge">
+          <div class="logo-box">U</div>
+          <div>
+            <div class="brand-name">USTED Nav</div>
+            <div class="brand-sub">Official Campus Map</div>
+          </div>
+        </div>
+        <div class="location-tag">📍 LOCATION: LECTURE & EXAM HALLS</div>
+      </header>
+
+      <section class="poster-hero">
+        <div class="poster-badge-pill">Running Late to Class?</div>
+        <h1 class="poster-headline">CAN'T FIND YOUR LECTURE ROOM?</h1>
+        <p class="poster-subheadline">
+          Search room numbers, blocks, labs, and faculty offices instantly with step-by-step walking directions.
+        </p>
+      </section>
+
+      <section class="qr-container-card">
+        <div class="qr-frame">
+          <div id="qrcode-halls" class="qr-code-box"></div>
+        </div>
+        <div class="scan-cta-pill">
+          <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 9a3 3 0 100 6 3 3 0 000-6zm-7 1a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-2.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 7H8.828a2 2 0 00-1.414.586L6.293 8.707A1 1 0 015.586 9H5z"/></svg>
+          POINT CAMERA TO OPEN MAP
+        </div>
+      </section>
+
+      <section class="poster-benefits">
+        <div class="benefit-item">
+          <div class="benefit-title">Instant Search</div>
+          <div class="benefit-desc">Type any room code or lecturer office.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Live Walking Routes</div>
+          <div class="benefit-desc">Avoid walking in circles between blocks.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Zero Installation</div>
+          <div class="benefit-desc">Opens right inside your mobile browser.</div>
+        </div>
+      </section>
+
+      <footer class="poster-footer">
+        <div class="footer-left">
+          <div class="footer-note">Scan with camera or visit directly:</div>
+          <div class="footer-main-url">ustednav.app</div>
+        </div>
+        <div class="badge-no-app">
+          ⚡ 100% Free · No App Download Needed
+        </div>
+      </footer>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- POSTER 2: CAMPUS GATES & FRESHER REGISTRATION -->
+    <!-- ========================================== -->
+    <div class="poster-sheet" id="poster-gates">
+      <div class="corner-mark top-left"></div>
+      <div class="corner-mark top-right"></div>
+      <div class="corner-mark bottom-left"></div>
+      <div class="corner-mark bottom-right"></div>
+
+      <header class="poster-header">
+        <div class="campus-badge">
+          <div class="logo-box">U</div>
+          <div>
+            <div class="brand-name">USTED Nav</div>
+            <div class="brand-sub">Official Campus Map</div>
+          </div>
+        </div>
+        <div class="location-tag">📍 LOCATION: MAIN ENTRANCE & REGISTRATION</div>
+      </header>
+
+      <section class="poster-hero">
+        <div class="poster-badge-pill" style="background:#dbeafe; color:#1e40af; border-color:#93c5fd;">First Time On Campus?</div>
+        <h1 class="poster-headline">DON'T WALK IN CIRCLES TODAY.</h1>
+        <p class="poster-subheadline">
+          Instantly locate your registration desk, faculty building, student clinic, banks, and campus hostels.
+        </p>
+      </section>
+
+      <section class="qr-container-card">
+        <div class="qr-frame">
+          <div id="qrcode-gates" class="qr-code-box"></div>
+        </div>
+        <div class="scan-cta-pill">
+          <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 9a3 3 0 100 6 3 3 0 000-6zm-7 1a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-2.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 7H8.828a2 2 0 00-1.414.586L6.293 8.707A1 1 0 015.586 9H5z"/></svg>
+          SCAN CAMERA TO NAVIGATE NOW
+        </div>
+      </section>
+
+      <section class="poster-benefits">
+        <div class="benefit-item">
+          <div class="benefit-title">Every Department</div>
+          <div class="benefit-desc">Administration, faculties, and clinics.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Student Hostels</div>
+          <div class="benefit-desc">Pinpointed gate-to-room walkways.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Zero Waiting</div>
+          <div class="benefit-desc">No 50MB Play Store download required.</div>
+        </div>
+      </section>
+
+      <footer class="poster-footer">
+        <div class="footer-left">
+          <div class="footer-note">Scan with camera or visit directly:</div>
+          <div class="footer-main-url">ustednav.app</div>
+        </div>
+        <div class="badge-no-app">
+          ⚡ 100% Free · Opens Instantly
+        </div>
+      </footer>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- POSTER 3: CAFETERIA & STUDENT UNION (SRC) -->
+    <!-- ========================================== -->
+    <div class="poster-sheet" id="poster-cafeteria">
+      <div class="corner-mark top-left"></div>
+      <div class="corner-mark top-right"></div>
+      <div class="corner-mark bottom-left"></div>
+      <div class="corner-mark bottom-right"></div>
+
+      <header class="poster-header">
+        <div class="campus-badge">
+          <div class="logo-box">U</div>
+          <div>
+            <div class="brand-name">USTED Nav</div>
+            <div class="brand-sub">Official Campus Map</div>
+          </div>
+        </div>
+        <div class="location-tag">📍 LOCATION: CAFETERIA & SRC HUB</div>
+      </header>
+
+      <section class="poster-hero">
+        <div class="poster-badge-pill" style="background:#fef3c7; color:#92400e; border-color:#fcd34d;">Save Your Energy</div>
+        <h1 class="poster-headline">WHERE IS YOUR NEXT LECTURE?</h1>
+        <p class="poster-subheadline">
+          Check distance, shortest walking paths, and room locations across all faculties before you start moving.
+        </p>
+      </section>
+
+      <section class="qr-container-card">
+        <div class="qr-frame">
+          <div id="qrcode-cafeteria" class="qr-code-box"></div>
+        </div>
+        <div class="scan-cta-pill">
+          <svg class="camera-icon" viewBox="0 0 24 24"><path d="M12 9a3 3 0 100 6 3 3 0 000-6zm-7 1a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-2.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 7H8.828a2 2 0 00-1.414.586L6.293 8.707A1 1 0 015.586 9H5z"/></svg>
+          SCAN TO FIND YOUR ROUTE
+        </div>
+      </section>
+
+      <section class="poster-benefits">
+        <div class="benefit-item">
+          <div class="benefit-title">Walking Times</div>
+          <div class="benefit-desc">Know if you have time for a meal.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Fast Shortcuts</div>
+          <div class="benefit-desc">Direct campus paths and walkways.</div>
+        </div>
+        <div class="benefit-item">
+          <div class="benefit-title">Browser Ready</div>
+          <div class="benefit-desc">Works instantly on any Android or iPhone.</div>
+        </div>
+      </section>
+
+      <footer class="poster-footer">
+        <div class="footer-left">
+          <div class="footer-note">Scan with camera or visit directly:</div>
+          <div class="footer-main-url">ustednav.app</div>
+        </div>
+        <div class="badge-no-app">
+          ⚡ 100% Free · No App Download Needed
+        </div>
+      </footer>
+    </div>
+
+  </div>
+
+  <script>
+    // Google Analytics UTM URL Tracking Setup:
+    // Poster 1: Halls / Complex
+    const urlHalls = "https://ustednav.app/?utm_source=campus_poster&utm_medium=qr&utm_campaign=hall_search&ref=block_halls";
+    // Poster 2: Campus Gates / Fresher registration
+    const urlGates = "https://ustednav.app/?utm_source=campus_poster&utm_medium=qr&utm_campaign=gate_entry&ref=main_gate";
+    // Poster 3: Cafeteria & Student Center
+    const urlCafeteria = "https://ustednav.app/?utm_source=campus_poster&utm_medium=qr&utm_campaign=cafeteria_hub&ref=cafeteria";
+
+    // Generate High-Resolution QR Codes with Maximum Contrast
+    new QRCode(document.getElementById("qrcode-halls"), {
+      text: urlHalls,
+      width: 210,
+      height: 210,
+      colorDark: "#0f172a",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    new QRCode(document.getElementById("qrcode-gates"), {
+      text: urlGates,
+      width: 210,
+      height: 210,
+      colorDark: "#0f172a",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    new QRCode(document.getElementById("qrcode-cafeteria"), {
+      text: urlCafeteria,
+      width: 210,
+      height: 210,
+      colorDark: "#0f172a",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  </script>
+</body>
+</html>
