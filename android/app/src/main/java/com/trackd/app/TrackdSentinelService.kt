@@ -1,5 +1,6 @@
 package com.trackd.app
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,11 +8,13 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 class TrackdSentinelService : Service() {
 
@@ -158,12 +161,39 @@ class TrackdSentinelService : Service() {
             .build()
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+ location FGS
-                startForeground(
-                    NOTIFICATION_ID, 
-                    notification, 
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+ (API 34)
+                val hasFine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasBgLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+                // On Android 14 (targetSdk 34), FOREGROUND_SERVICE_TYPE_LOCATION requires location permission
+                // AND either foreground state or background location exemption. If started during initial launch
+                // before permissions are granted, or restarting in background, passing LOCATION causes a fatal SecurityException.
+                // We default to DATA_SYNC (authorized by FOREGROUND_SERVICE_DATA_SYNC), combining LOCATION only if permitted.
+                var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                if ((hasFine || hasCoarse) && hasBgLocation) {
+                    serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+
+                try {
+                    startForeground(NOTIFICATION_ID, notification, serviceType)
+                } catch (se: SecurityException) {
+                    Log.w(TAG, "Location/combined FGS rejected, falling back to DATA_SYNC only", se)
+                    try {
+                        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                    } catch (inner: Throwable) {
+                        Log.e(TAG, "Failed to start FGS with DATA_SYNC fallback", inner)
+                    }
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10-13 (API 29-33)
+                val hasFine = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val serviceType = if (hasFine || hasCoarse) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+                if (serviceType != 0) {
+                    startForeground(NOTIFICATION_ID, notification, serviceType)
+                } else {
+                    startForeground(NOTIFICATION_ID, notification)
+                }
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }

@@ -73,7 +73,7 @@
         <service
             android:name=".TrackdSentinelService"
             android:exported="false"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="dataSync|location" />
 
         <receiver
             android:name=".AntiTheftAdminReceiver"
