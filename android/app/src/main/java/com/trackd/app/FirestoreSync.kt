@@ -250,14 +250,19 @@ object FirestoreSync {
         if (deviceId.isNullOrBlank()) return
         try {
             val db = FirebaseFirestore.getInstance()
-            db.collection("devices").document(deviceId).get()
+            db.collection("devices").document(deviceId).get(com.google.firebase.firestore.Source.SERVER)
                 .addOnSuccessListener { snapshot ->
                     if (snapshot != null && snapshot.exists()) {
                         handleDeviceSnapshot(context, db, deviceId, snapshot)
                     }
                 }
-                .addOnFailureListener { error ->
-                    Log.w(TAG, "syncDeviceState get error: ${error.message}")
+                .addOnFailureListener {
+                    db.collection("devices").document(deviceId).get()
+                        .addOnSuccessListener { snapshot ->
+                            if (snapshot != null && snapshot.exists()) {
+                                handleDeviceSnapshot(context, db, deviceId, snapshot)
+                            }
+                        }
                 }
         } catch (error: Throwable) {
             Log.w(TAG, "syncDeviceState error", error)
@@ -305,16 +310,19 @@ object FirestoreSync {
         snapshot: DocumentSnapshot
     ) {
         val rawStolen = snapshot.get("isStolen")
-        val stolen = when (rawStolen) {
-            is Boolean -> rawStolen
-            is String -> rawStolen.equals("true", ignoreCase = true)
-            is Number -> rawStolen.toInt() == 1
-            else -> false
-        }
-        val currentStolen = AegisState.isStolen(context)
-        Log.i(TAG, "device snapshot: isStolen=$stolen (current=$currentStolen)")
-        if (currentStolen != stolen) {
-            AegisState.setStolen(context, stolen)
+        if (rawStolen != null) {
+            val stolen = when (rawStolen) {
+                is Boolean -> rawStolen
+                is String -> rawStolen.equals("true", ignoreCase = true)
+                is Number -> rawStolen.toInt() == 1
+                else -> false
+            }
+            val isFromCache = snapshot.metadata.isFromCache
+            val currentStolen = AegisState.isStolen(context)
+            Log.i(TAG, "device snapshot: isStolen=$stolen (current=$currentStolen, isFromCache=$isFromCache)")
+            if (!isFromCache && currentStolen != stolen) {
+                AegisState.setStolen(context, stolen)
+            }
         }
 
         if (snapshot.getBoolean("requestLocate") == true) {

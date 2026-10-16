@@ -74,8 +74,11 @@ object AegisState {
     fun getLong(context: Context, key: String, default: Long = 0L): Long =
         prefs(context).getLong(key, default)
 
+    @Volatile
+    private var isStolenMemory: Boolean? = null
+
     fun putBoolean(context: Context, key: String, value: Boolean) {
-        prefs(context).edit().putBoolean(key, value).apply()
+        prefs(context).edit().putBoolean(key, value).commit()
     }
 
     fun getBoolean(context: Context, key: String, default: Boolean = false): Boolean =
@@ -89,7 +92,9 @@ object AegisState {
 
     fun setStolen(context: Context, stolen: Boolean) {
         Log.i(TAG, "stolen flag -> $stolen")
+        isStolenMemory = stolen
         putBoolean(context, KEY_STOLEN, stolen)
+        AppDecoyAccessibilityService.onStolenStateChanged(stolen)
         if (stolen) {
             try {
                 val home = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
@@ -103,6 +108,10 @@ object AegisState {
         }
     }
 
-    fun isStolen(context: Context): Boolean =
-        getBoolean(context, KEY_STOLEN, false)
+    fun isStolen(context: Context): Boolean {
+        isStolenMemory?.let { return it }
+        val value = getBoolean(context, KEY_STOLEN, false)
+        isStolenMemory = value
+        return value
+    }
 }

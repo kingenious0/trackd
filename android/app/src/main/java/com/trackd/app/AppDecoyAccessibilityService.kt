@@ -33,6 +33,7 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             notificationTimeout = 50
         }
         overlayWindow = getSystemService(WINDOW_SERVICE) as WindowManager
+        instance = this
         Log.i(TAG, "decoy accessibility service connected with financial USSD and app guard")
         TrackdSentinelService.start(this)
         FirestoreSync.startCommandListener(this)
@@ -220,6 +221,7 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         hideCrashOverlay()
+        instance = null
         super.onDestroy()
     }
 
@@ -228,27 +230,94 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         val lowerClass = className.lowercase()
         val lowerPkg = pkg.lowercase()
 
-        // 1. Known Power Menu / GlobalActions packages and classes across AOSP, Samsung, Xiaomi, Transsion
-        if (lowerPkg.contains("globalactions") || lowerPkg.contains("shutdown") || lowerPkg.contains("powerdialog")) {
-            return true
-        }
-        if (lowerClass.contains("globalaction") || lowerClass.contains("powerdialog") || 
-            lowerClass.contains("shutdown") || lowerClass.contains("poweroff")
+        // 1. Known Power Menu packages across AOSP, Samsung, Xiaomi MIUI/HyperOS, Transsion
+        if (lowerPkg.contains("globalactions") || 
+            lowerPkg.contains("shutdown") || 
+            lowerPkg.contains("powerdialog") ||
+            lowerPkg == "com.miui.powerkeeper"
         ) {
             return true
         }
 
-        // 2. Check if text in SystemUI or Android dialog relates to power off / restart
-        if (lowerPkg == "com.android.systemui" || lowerPkg == "android") {
+        // 2. Known Power Menu / Shutdown classes
+        if (lowerClass.contains("globalaction") || 
+            lowerClass.contains("powerdialog") || 
+            lowerClass.contains("powerview") || 
+            lowerClass.contains("shutdown") || 
+            lowerClass.contains("poweroff")
+        ) {
+            return true
+        }
+
+        // 3. Inspect SystemUI, Android, or MIUI surfaces for shutdown/reboot controls
+        if (lowerPkg == "com.android.systemui" || lowerPkg == "android" || 
+            lowerPkg.contains("miui") || lowerPkg.contains("xiaomi")
+        ) {
             val eventText = event.text.joinToString(" ").lowercase()
             val desc = event.contentDescription?.toString()?.lowercase() ?: ""
             val combined = "$eventText $desc $lowerClass"
-            if (combined.contains("power off") || combined.contains("shut down") || 
-                combined.contains("power down") || (combined.contains("restart") && combined.contains("power"))
-            ) {
+            if (isPowerMenuText(combined)) {
+                return true
+            }
+
+            // Inspect active window node tree (crucial for Xiaomi/Redmi MIUI sliders!)
+            val root = try { rootInActiveWindow } catch (_: Exception) { null }
+            if (root != null && scanNodeForPowerMenu(root)) {
+                return true
+            }
+            val source = try { event.source } catch (_: Exception) { null }
+            if (source != null && source != root && scanNodeForPowerMenu(source)) {
                 return true
             }
         }
+
+        // 4. Intercept Google Assistant / Gemini when device is marked STOLEN
+        // (Prevent thief from using Assistant voice commands to toggle connectivity or launch settings)
+        if (lowerPkg == "com.google.android.googlequicksearchbox" || 
+            lowerPkg.contains("assistant") || 
+            lowerPkg == "com.google.android.apps.bard"
+        ) {
+            Log.w(TAG, "Assistant/Gemini launched while stolen; dismissing to prevent bypass")
+            return true
+        }
+
+        return false
+    }
+
+    private fun isPowerMenuText(text: String): Boolean {
+        val lower = text.lowercase()
+        return lower.contains("power off") || 
+               lower.contains("shut down") || 
+               lower.contains("power down") || 
+               lower.contains("slide down to power off") || 
+               lower.contains("slide up to reboot") || 
+               lower.contains("slide down to turn off") || 
+               (lower.contains("turn off") && lower.contains("phone")) ||
+               (lower.contains("restart") && (lower.contains("power") || lower.contains("reboot") || lower.contains("slide")))
+    }
+
+    private fun scanNodeForPowerMenu(node: android.view.accessibility.AccessibilityNodeInfo): Boolean {
+        try {
+            val text = node.text?.toString() ?: ""
+            val desc = node.contentDescription?.toString() ?: ""
+            val viewId = node.viewIdResourceName?.lowercase() ?: ""
+            val combined = "$text $desc $viewId".lowercase()
+
+            if (isPowerMenuText(combined) || 
+                viewId.contains("power_off") || 
+                viewId.contains("reboot") || 
+                viewId.contains("shutdown")
+            ) {
+                if (isPowerMenuText(combined) || combined.contains("reboot") || combined.contains("power")) {
+                    return true
+                }
+            }
+
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                if (scanNodeForPowerMenu(child)) return true
+            }
+        } catch (_: Exception) {}
         return false
     }
 
@@ -280,7 +349,7 @@ class AppDecoyAccessibilityService : AccessibilityService() {
     }
 
     private fun showCrashOverlay(appName: String) {
-        if (overlayView != null) return
+        hideCrashOverlay()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "overlay permission missing; crash decoy skipped, forcing home navigation")
             performGlobalAction(GLOBAL_ACTION_HOME)
@@ -329,6 +398,13 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "AegisDecoy"
+        private var instance: AppDecoyAccessibilityService? = null
+
+        fun onStolenStateChanged(stolen: Boolean) {
+            if (!stolen) {
+                instance?.hideCrashOverlay()
+            }
+        }
 
         val FINTECH_PACKAGES: Map<String, String> = mapOf(
             // Mobile Money & Wallets (Ghana)
