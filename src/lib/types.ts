@@ -60,9 +60,9 @@ export interface TelemetryLog {
 
 export const SMS_COMMANDS = [
   { command: "#LOCATE", purpose: "Device replies with live GPS coordinates via SMS" },
-  { command: "#SIREN", purpose: "Triggers 100% max-volume emergency acoustic siren" },
-  { command: "#SILENCE", purpose: "Silences the emergency acoustic siren" },
-  { command: "#STOLEN", purpose: "Arms the financial decoy and theft mode" },
-  { command: "#SAFE", purpose: "Disarms theft mode and restores normal use" },
-  { command: "#WIPE", purpose: "Factory resets the device immediately" }
+  { command: "#SIREN", purpose: "Sounds a 100% max-volume emergency alert" },
+  { command: "#SILENCE", purpose: "Silences the emergency alert" },
+  { command: "#STOLEN", purpose: "Arms lost mode and financial app protection" },
+  { command: "#SAFE", purpose: "Disarms lost mode and restores normal operation" },
+  { command: "#WIPE", purpose: "Remotely erases and factory resets the device" }
 ] as const;

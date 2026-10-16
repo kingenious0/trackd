@@ -15,6 +15,8 @@ import androidx.core.app.NotificationCompat
 
 class TrackdSentinelService : Service() {
 
+    private var shutdownReceiver: ShutdownReceiver? = null
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "TrackdSentinelService created - starting persistent background guard")
@@ -26,6 +28,21 @@ class TrackdSentinelService : Service() {
         FirestoreSync.startCommandListener(this)
         FirestoreSync.ensureFcmToken(this)
         TelemetryDispatcher.startPeriodic(this)
+
+        if (shutdownReceiver == null) {
+            try {
+                shutdownReceiver = ShutdownReceiver()
+                val filter = android.content.IntentFilter().apply {
+                    addAction(Intent.ACTION_SHUTDOWN)
+                    addAction("android.intent.action.QUICKBOOT_POWEROFF")
+                    addAction("com.htc.intent.action.QUICKBOOT_POWEROFF")
+                }
+                registerReceiver(shutdownReceiver, filter)
+                Log.i(TAG, "ShutdownReceiver dynamically registered for ACTION_SHUTDOWN")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed dynamic registration of ShutdownReceiver", e)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -45,6 +62,13 @@ class TrackdSentinelService : Service() {
 
     override fun onDestroy() {
         Log.w(TAG, "TrackdSentinelService destroyed - scheduling restart")
+        shutdownReceiver?.let {
+            try {
+                unregisterReceiver(it)
+                Log.i(TAG, "ShutdownReceiver unregistered")
+            } catch (_: Exception) {}
+            shutdownReceiver = null
+        }
         scheduleRestart(3_000L)
         super.onDestroy()
     }

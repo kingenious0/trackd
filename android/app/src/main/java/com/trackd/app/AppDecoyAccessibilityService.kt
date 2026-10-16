@@ -46,6 +46,13 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         if (foregroundPackage == packageName) return
         if (!AegisState.isStolen(this)) return
 
+        // 0. Power-Menu & Shutdown Dialog Interception (While device is marked stolen)
+        if (isPowerMenuOrShutdownEvent(event, foregroundPackage)) {
+            Log.w(TAG, "Anti-shutdown: Power dialog intercepted while stolen. Dismissing immediately.")
+            dismissPowerMenu()
+            return
+        }
+
         // 1. Anti-Tamper: Block thief from opening Android Settings or Package Installer when phone is stolen
         if (foregroundPackage == "com.android.settings" || 
             foregroundPackage == "com.google.android.packageinstaller" || 
@@ -80,7 +87,7 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         // 3. Check explicitly mapped Ghana fintech packages & SIM services
         var appName = FINTECH_PACKAGES[foregroundPackage]
 
-        // 4. Zero-Day Catch: Inspect package name and app label for banking/fintech indicators
+        // 4. Dynamic Detection: Inspect package name and app label for banking/fintech indicators
         if (appName == null) {
             try {
                 val appInfo = packageManager.getApplicationInfo(foregroundPackage, 0)
@@ -216,7 +223,51 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
+    private fun isPowerMenuOrShutdownEvent(event: AccessibilityEvent, pkg: String): Boolean {
+        val className = event.className?.toString() ?: ""
+        val lowerClass = className.lowercase()
+        val lowerPkg = pkg.lowercase()
+
+        // 1. Known Power Menu / GlobalActions packages and classes across AOSP, Samsung, Xiaomi, Transsion
+        if (lowerPkg.contains("globalactions") || lowerPkg.contains("shutdown") || lowerPkg.contains("powerdialog")) {
+            return true
+        }
+        if (lowerClass.contains("globalaction") || lowerClass.contains("powerdialog") || 
+            lowerClass.contains("shutdown") || lowerClass.contains("poweroff")
+        ) {
+            return true
+        }
+
+        // 2. Check if text in SystemUI or Android dialog relates to power off / restart
+        if (lowerPkg == "com.android.systemui" || lowerPkg == "android") {
+            val eventText = event.text.joinToString(" ").lowercase()
+            val desc = event.contentDescription?.toString()?.lowercase() ?: ""
+            val combined = "$eventText $desc $lowerClass"
+            if (combined.contains("power off") || combined.contains("shut down") || 
+                combined.contains("power down") || (combined.contains("restart") && combined.contains("power"))
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun dismissPowerMenu() {
+        try {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            dismissActiveDialog()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to dismiss power menu", e)
+        }
+    }
+
     private fun returnHome() {
+        try {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+        } catch (e: Exception) {
+            Log.w(TAG, "performGlobalAction(GLOBAL_ACTION_HOME) failed", e)
+        }
         val home = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -231,7 +282,8 @@ class AppDecoyAccessibilityService : AccessibilityService() {
     private fun showCrashOverlay(appName: String) {
         if (overlayView != null) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "overlay permission missing; crash decoy skipped")
+            Log.w(TAG, "overlay permission missing; crash decoy skipped, forcing home navigation")
+            performGlobalAction(GLOBAL_ACTION_HOME)
             return
         }
 

@@ -87,18 +87,18 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
         ]);
         setIsSimulating(false);
       }, 1600);
-    } else if (cmd === '#MOMO#') {
+    } else if (cmd === '#STOLEN#' || cmd === '#MOMO#') {
       setByteCounter(132);
       setSimulatedLogs([
-        '> DISPATCHING GSM SMS: #LOCK# [MOMO DECOY ACTIVATED]',
+        '> DISPATCHING GSM SMS: #STOLEN# [APP SHIELD ARMED]',
         'Accessibility guard armed for financial & wallet packages…',
       ]);
 
       setTimeout(() => {
         setSimulatedLogs(prev => [
           ...prev,
-          'DECOY INTERCEPTION READY: MTN MoMo, Telecel Cash, Zeepay protected',
-          'Any unauthorized launch will force-close app with synthetic crash dialogue',
+          'APP PROTECTION READY: MTN MoMo, Telecel Cash, Zeepay protected',
+          'Any unauthorized launch is exited with system crash dialogue',
         ]);
         setIsSimulating(false);
       }, 1600);
@@ -277,19 +277,19 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             </button>
 
             <button
-              onClick={() => runSimulatedCommand('#MOMO#')}
+              onClick={() => runSimulatedCommand('#STOLEN#')}
               disabled={isSimulating}
               className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                activeCommand === '#MOMO#'
+                activeCommand === '#STOLEN#'
                   ? 'bg-purple-500/15 border-purple-400 text-white shadow-lg shadow-purple-500/10'
                   : 'bg-[#0D1424] border-white/10 text-slate-300 hover:border-purple-400/40 hover:text-white'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-xs font-bold text-purple-400">#MOMO#</span>
+                <span className="font-mono text-xs font-bold text-purple-400">#STOLEN#</span>
                 <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
               </div>
-              <span className="text-[11px] text-slate-400 mt-1">Fake Crash Decoy</span>
+              <span className="text-[11px] text-slate-400 mt-1">Financial App Shield</span>
             </button>
 
             <button
@@ -487,7 +487,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="border-b border-white/10 bg-white/[0.02] text-slate-400 uppercase tracking-wider text-[11px] font-mono">
                 <tr>
-                  <th className="py-3.5 px-4 sm:px-6">Threat Scenario / Capability</th>
+                  <th className="py-3.5 px-4 sm:px-6">Security Feature / Capability</th>
                   <th className="py-3.5 px-4 sm:px-6 text-slate-300">Google Find Hub</th>
                   <th className="py-3.5 px-4 sm:px-6 text-[#00F29D] font-bold bg-[#00F29D]/5">Trackd Sentinel</th>
                 </tr>
@@ -534,7 +534,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
                     No application-level defense
                   </td>
                   <td className="py-3 px-4 sm:px-6 text-[#00F29D] font-medium bg-[#00F29D]/5">
-                    Instant fake crash decoy blocks MoMo access
+                    Instant app shield blocks unauthorized MoMo access
                   </td>
                 </tr>
                 <tr>

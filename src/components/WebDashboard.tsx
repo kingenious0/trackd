@@ -625,7 +625,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
               </div>
             )}
 
-            {/* Tactical Status Cards with Real Reverse Geocoding */}
+            {/* Device Status Cards with Real Reverse Geocoding */}
             <div className="rounded-2xl bg-[#0D1322] border border-white/10 p-4 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-400">

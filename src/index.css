@@ -106,7 +106,7 @@ html.dark {
   line-height: 1.4;
 }
 
-/* Tactical Dark Tile Filter (Zero API keys, transforms standard OSM into dark map) */
+/* Dark Map Tile Filter (Zero API keys, transforms standard OSM into dark map) */
 .dark-osm-tiles .leaflet-tile-pane {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(92%);
 }

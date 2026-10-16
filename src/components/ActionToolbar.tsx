@@ -40,8 +40,8 @@ export default function ActionToolbar({ device, onCommand, demo = false }: Props
             : command === "WIPE"
               ? "Wipe dispatched. If the phone is offline, send #WIPE#[PIN] by SMS."
               : command === "STOLEN"
-                ? "Theft mode armed. Decoy and alerts activate when the phone syncs."
-                : "Device marked safe. Theft mode disarmed."
+                ? "Lost mode armed. Financial protection and alerts activate when the phone syncs."
+                : "Device marked safe. Lost mode disarmed."
       });
     } catch (error) {
       setMessage({

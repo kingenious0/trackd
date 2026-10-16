@@ -188,8 +188,8 @@ export default function PermissionChecklist() {
     },
     {
       key: "accessibility",
-      label: "Accessibility · Trackd Financial Guard",
-      hint: "Arms the banking-app crash decoy",
+      label: "Financial Protection · App Guard",
+      hint: "Protects banking & mobile money apps if device is lost",
       done: status?.accessibilityEnabled ?? null,
       actionLabel: "Open settings",
       action: () => TrackdBridge.openAccessibilitySettings()
@@ -197,7 +197,7 @@ export default function PermissionChecklist() {
     {
       key: "overlay",
       label: "Display over other apps",
-      hint: "Required to draw the fake crash dialog",
+      hint: "Allows Trackd to display the app protection screen",
       done: null,
       actionLabel: "Allow",
       action: () => TrackdBridge.requestOverlayPermission()
@@ -254,6 +254,25 @@ export default function PermissionChecklist() {
           </li>
         ))}
       </ul>
+
+      {status?.accessibilityEnabled !== true && (
+        <div className="mt-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-[11px] text-muted">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="font-semibold text-ink">Android 13+ Note (Restricted Settings)</p>
+              <p className="mt-0.5 text-slate-400 leading-relaxed">
+                If the Accessibility switch is greyed out, tap below to open <strong>App Info</strong>, tap the <strong>three dots (⋮)</strong> in the top-right, and choose <strong>"Allow restricted settings"</strong>.
+              </p>
+            </div>
+            <button
+              className="btn-outline shrink-0 !rounded-lg !px-2.5 !py-1 !text-[10px] text-accent font-medium"
+              onClick={() => run("app-info", () => TrackdBridge.openAppSettings())}
+            >
+              Open App Info
+            </button>
+          </div>
+        </div>
+      )}
 
       {status && (
         <div className="mt-2 grid grid-cols-2 gap-1.5 px-1 text-[11px] text-muted">
