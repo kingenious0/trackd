@@ -4,7 +4,7 @@ import { Capacitor } from "@capacitor/core";
 import { Cpu, KeyRound, Loader2, Smartphone } from "lucide-react";
 import { fetchProfile, createDevice, saveProfile } from "../lib/api";
 import { projectId } from "../lib/firebase";
-import { sha256Hex, toUnsignedE164 } from "../lib/crypto";
+import { sha256Hex, toUnsignedE164, encryptPin } from "../lib/crypto";
 import { TrackdBridge } from "../plugins/trackd";
 
 interface Props {
@@ -52,12 +52,17 @@ export default function DeviceOnboarding({ user, demo = false, onCreated }: Prop
     try {
       const ownerId = demo ? "demo-user" : (user?.uid ?? "");
       if (!demo && user) {
+        const [pinHash, pinBlob] = await Promise.all([
+          sha256Hex(pin),
+          encryptPin(pin, user.uid)
+        ]);
         await saveProfile(user.uid, {
           fullName: user.displayName ?? "",
           email: user.email ?? "",
           phoneNumber: toUnsignedE164(phone),
           emergencyContactPhone: toUnsignedE164(emergencyPhone),
-          masterPinHash: await sha256Hex(pin),
+          masterPinHash: pinHash,
+          encryptedPin: pinBlob,
           createdAt: new Date().toISOString()
         });
       }

@@ -5,100 +5,166 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.telephony.SmsManager
-import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SimStateReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            "android.intent.action.LOCKED_BOOT_COMPLETED" -> {
-                TrackdSentinelService.start(context)
-                TelemetryDispatcher.sendNow(context, "BOOT")
+        val pendingResult = goAsync()
+
+        try {
+            val action = intent.action
+            when (action) {
+                Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED,
+                "android.intent.action.LOCKED_BOOT_COMPLETED" -> {
+                    Log.i(TAG, "Lifecycle event received: $action - starting TrackdSentinelService")
+                    TrackdSentinelService.start(context)
+                    val trigger = if (action == Intent.ACTION_MY_PACKAGE_REPLACED) "UPDATE" else "BOOT"
+                    TelemetryDispatcher.sendNow(context, trigger)
+                    pendingResult.finish()
+                    return
+                }
+                "android.intent.action.SIM_STATE_CHANGED",
+                "android.telephony.action.SIM_STATE_CHANGED" -> Unit
+                else -> {
+                    pendingResult.finish()
+                    return
+                }
             }
-            "android.intent.action.SIM_STATE_CHANGED" -> Unit
-            else -> return
-        }
 
-        val simState = intent.extras?.get("simstate")?.toString()
-            ?: intent.getStringExtra("ss")
+            val simState = intent.extras?.get("simstate")?.toString()
+                ?: intent.getStringExtra("ss")
 
-        // Handle SIM removal / absent state
-        if (simState == "ABSENT" || simState == "1") {
-            Log.w(TAG, "SIM card removed or tray opened (ABSENT)")
-            // Telemetry dispatcher sends over Wi-Fi if available
-            TelemetryDispatcher.sendNow(context, "SIM_REMOVED")
-            return
-        }
+            // Handle SIM removal / absent state
+            if (simState == "ABSENT" || simState == "1") {
+                Log.w(TAG, "SIM card removed or tray opened (ABSENT)")
+                TelemetryDispatcher.sendNow(context, "SIM_REMOVED")
+                pendingResult.finish()
+                return
+            }
 
-        if (simState != null && simState != "READY" && simState != "LOADED" && simState != "5") return
+            if (simState != null && simState != "READY" && simState != "LOADED" && simState != "5") {
+                pendingResult.finish()
+                return
+            }
 
-        val currentFingerprint = SimHelper.getSimFingerprint(context)
-        if (currentFingerprint.isNullOrBlank()) return
+            val currentFingerprint = SimHelper.getSimFingerprint(context)
+            if (currentFingerprint.isNullOrBlank()) {
+                pendingResult.finish()
+                return
+            }
 
-        val cached = AegisState.getString(context, AegisState.KEY_REGISTERED_SIM)
-        if (cached == null) {
+            val cached = AegisState.getString(context, AegisState.KEY_REGISTERED_SIM)
+            if (cached == null) {
+                AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentFingerprint)
+                Log.i(TAG, "baseline SIM fingerprint cached")
+                pendingResult.finish()
+                return
+            }
+
+            if (cached == currentFingerprint) {
+                pendingResult.finish()
+                return
+            }
+
+            Log.w(TAG, "SIM swap detected! Initiating emergency protocol")
+            val line = SimHelper.getLine1Number(context) ?: "Unknown"
             AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentFingerprint)
-            Log.i(TAG, "baseline SIM fingerprint cached")
-            return
+            dispatchAlert(context, line, pendingResult)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onReceive", e)
+            try {
+                pendingResult.finish()
+            } catch (_: Exception) {}
         }
-
-        if (cached == currentFingerprint) return
-        Log.w(TAG, "SIM swap detected")
-
-        val line = SimHelper.getLine1Number(context)
-        AegisState.putString(context, AegisState.KEY_REGISTERED_SIM, currentFingerprint)
-        dispatchAlert(context, line)
     }
 
-    private fun dispatchAlert(context: Context, newNumber: String) {
+    private fun dispatchAlert(context: Context, newNumber: String, pendingResult: PendingResult) {
         val phone = AegisState.getString(context, AegisState.KEY_EMERGENCY_PHONE)
         if (phone.isNullOrBlank()) {
-            Log.w(TAG, "no emergency contact configured")
+            Log.w(TAG, "No emergency contact configured for SIM swap alert")
+            pendingResult.finish()
             return
         }
 
-        val client = LocationServices.getFusedLocationProviderClient(context)
+        // P0/P1 Fix: Send immediate base SMS alert FIRST so owner is notified even if GPS fails
+        val baseAlert = "ALERT: SIM swap detected on your phone. Active line: $newNumber"
+        sendSms(context, phone, baseAlert)
+
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        val task = try {
-            if (granted) client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null) else null
-        } catch (security: SecurityException) {
-            null
-        }
-
-        val base = "ALERT: SIM swap detected. New number: $newNumber"
-        if (task == null) {
-            sendSms(context, phone, base)
+        if (!granted) {
+            Log.w(TAG, "Location permission not granted for SIM follow-up")
+            pendingResult.finish()
             return
         }
 
-        task.addOnCompleteListener { locationTask ->
-            val location = locationTask.result
-            if (location != null) {
-                Thread {
-                    FirestoreSync.writeTelemetry(
-                        context,
-                        location.latitude,
-                        location.longitude,
-                        location.accuracy.toInt(),
-                        "SIM_CHANGE"
-                    )
-                }.start()
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        val cancellation = CancellationTokenSource()
+        val finished = AtomicBoolean(false)
+        val handler = Handler(Looper.getMainLooper())
+
+        // Safety timeout: 9 seconds for high accuracy GPS fix
+        val timeoutRunnable = Runnable {
+            if (finished.compareAndSet(false, true)) {
+                cancellation.cancel()
+                Log.w(TAG, "Location fetch timed out for SIM swap follow-up")
+                try {
+                    pendingResult.finish()
+                } catch (_: Exception) {}
             }
-            val suffix = if (location != null) {
-                " GPS: https://maps.google.com/?q=${location.latitude},${location.longitude}"
-            } else {
-                ""
+        }
+        handler.postDelayed(timeoutRunnable, 9_000L)
+
+        try {
+            val locationTask = client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
+            locationTask.addOnCompleteListener { task ->
+                handler.removeCallbacks(timeoutRunnable)
+                if (finished.compareAndSet(false, true)) {
+                    val location = if (task.isSuccessful) task.result else null
+                    if (location != null) {
+                        Log.i(TAG, "GPS acquired for SIM swap follow-up: ${location.latitude},${location.longitude}")
+                        val followUpSms = "Trackd GPS: https://maps.google.com/?q=${location.latitude},${location.longitude} (Acc: ${location.accuracy.toInt()}m)"
+                        sendSms(context, phone, followUpSms)
+
+                        Thread {
+                            try {
+                                FirestoreSync.writeTelemetry(
+                                    context,
+                                    location.latitude,
+                                    location.longitude,
+                                    location.accuracy.toInt(),
+                                    "SIM_SWAP_ALERT"
+                                )
+                            } catch (_: Exception) {}
+                        }.start()
+                    } else {
+                        Log.w(TAG, "No GPS fix obtained for SIM swap follow-up")
+                    }
+                    try {
+                        pendingResult.finish()
+                    } catch (_: Exception) {}
+                }
             }
-            sendSms(context, phone, base + suffix)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during location fetch for SIM swap", e)
+            handler.removeCallbacks(timeoutRunnable)
+            if (finished.compareAndSet(false, true)) {
+                try {
+                    pendingResult.finish()
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -111,9 +177,9 @@ class SimStateReceiver : BroadcastReceiver() {
                 SmsManager.getDefault()
             }
             smsManager.sendTextMessage(phone, null, message, null, null)
-            Log.i(TAG, "SIM swap alert dispatched")
+            Log.i(TAG, "SIM swap SMS dispatched to $phone: $message")
         } catch (error: Exception) {
-            Log.e(TAG, "SIM alert failed", error)
+            Log.e(TAG, "Failed to send SMS to $phone", error)
         }
     }
 

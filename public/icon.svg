@@ -1,6 +1,75 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#1a73e8"/>
-  <circle cx="32" cy="32" r="13" fill="none" stroke="#fff" stroke-width="4"/>
-  <circle cx="32" cy="32" r="4.5" fill="#fff"/>
-  <path d="M32 9v7M32 48v7M9 32h7M48 32h7" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#0E182A"/>
+      <stop offset="100%" stop-color="#050811"/>
+    </radialGradient>
+    <linearGradient id="mintGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F29D"/>
+      <stop offset="50%" stop-color="#00DCA0"/>
+      <stop offset="100%" stop-color="#00A86B"/>
+    </linearGradient>
+    <linearGradient id="foldShadow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00A86B"/>
+      <stop offset="100%" stop-color="#005B38"/>
+    </linearGradient>
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Deep Midnight Rounded Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)"/>
+  <rect width="512" height="512" rx="112" stroke="#00F29D" stroke-width="2" stroke-opacity="0.15"/>
+
+  <!-- Signal / Radar Waves radiating from top-right -->
+  <g filter="url(#neonGlow)">
+    <!-- Inner Wave -->
+    <path d="M 280 115 A 140 140 0 0 1 348 180" 
+          stroke="url(#mintGrad)" stroke-width="26" stroke-linecap="round" fill="none"/>
+    <!-- Outer Wave -->
+    <path d="M 285 75 A 190 190 0 0 1 378 185" 
+          stroke="url(#mintGrad)" stroke-width="28" stroke-linecap="round" fill="none"/>
+  </g>
+
+  <!-- Main Location Pin Teardrop Body -->
+  <g filter="url(#neonGlow)">
+    <!-- Base Ribbon Pin -->
+    <path d="M 248 100
+             C 160 100, 150 170, 150 216
+             C 150 286, 222 344, 248 370
+             C 274 344, 346 286, 346 216
+             C 346 170, 336 100, 248 100 Z"
+          fill="url(#mintGrad)"/>
+
+    <!-- 3D Shadow Layer in Bottom Fold -->
+    <path d="M 248 370
+             C 230 350, 215 325, 225 295
+             C 240 250, 290 280, 275 330
+             C 264 350, 256 360, 248 370 Z"
+          fill="url(#foldShadow)" opacity="0.65"/>
+
+    <!-- Pin Inner Core (Midnight Cutout) -->
+    <circle cx="248" cy="216" r="66" fill="#070B14"/>
+
+    <!-- Rounded Brand "t" Lettermark inside the core -->
+    <path d="M 240 172
+             A 10 10 0 0 1 250 162
+             L 250 188
+             L 272 188
+             A 8 8 0 0 1 272 204
+             L 250 204
+             L 250 242
+             C 250 254, 258 260, 268 258
+             A 7 7 0 0 1 274 271
+             C 256 276, 234 270, 234 246
+             L 234 204
+             L 224 204
+             A 8 8 0 0 1 224 188
+             L 234 188
+             L 234 172
+             A 10 10 0 0 1 240 172 Z"
+          fill="#FFFFFF"/>
+  </g>
 </svg>

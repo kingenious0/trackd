@@ -11,14 +11,20 @@ export default {
         ink: "rgb(var(--c-ink) / <alpha-value>)",
         muted: "rgb(var(--c-muted) / <alpha-value>)",
         line: "rgb(var(--c-line) / <alpha-value>)",
-        accent: "#1a73e8",
-        secure: "#1e8e3e",
-        danger: "#d93025",
-        warning: "#f9ab00"
+        accent: "#00F29D",
+        "accent-dark": "#00C888",
+        "brand-dark": "#070B14",
+        "brand-panel": "#0D1322",
+        "brand-card": "#111827",
+        secure: "#00F29D",
+        danger: "#EF4444",
+        warning: "#F59E0B"
       },
       boxShadow: {
-        float: "0 4px 24px rgba(32, 33, 36, 0.16), 0 1px 3px rgba(32, 33, 36, 0.08)",
-        soft: "0 1px 3px rgba(32, 33, 36, 0.1)"
+        float: "0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2)",
+        soft: "0 1px 3px rgba(0, 0, 0, 0.3)",
+        "glow-mint": "0 0 25px rgba(0, 242, 157, 0.35)",
+        "glow-mint-sm": "0 0 12px rgba(0, 242, 157, 0.25)"
       },
       fontFamily: {
         sans: [

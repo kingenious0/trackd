@@ -16,6 +16,8 @@ export interface UserProfile {
   phoneNumber: string;
   emergencyContactPhone: string;
   masterPinHash: string;
+  /** AES-GCM encrypted PIN blob: `<iv_b64>.<ciphertext_b64>`, keyed to user UID */
+  encryptedPin?: string;
   createdAt: string;
 }
 

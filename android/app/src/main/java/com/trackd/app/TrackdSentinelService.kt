@@ -15,16 +15,6 @@ import androidx.core.app.NotificationCompat
 
 class TrackdSentinelService : Service() {
 
-    private val syncHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val syncRunnable = object : Runnable {
-        override fun run() {
-            try {
-                FirestoreSync.syncDeviceState(this@TrackdSentinelService)
-            } catch (_: Exception) {}
-            syncHandler.postDelayed(this, 20_000L)
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "TrackdSentinelService created - starting persistent background guard")
@@ -36,8 +26,6 @@ class TrackdSentinelService : Service() {
         FirestoreSync.startCommandListener(this)
         FirestoreSync.ensureFcmToken(this)
         TelemetryDispatcher.startPeriodic(this)
-        syncHandler.removeCallbacks(syncRunnable)
-        syncHandler.postDelayed(syncRunnable, 5_000L)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -56,31 +44,58 @@ class TrackdSentinelService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
-        Log.w(TAG, "TrackdSentinelService destroyed - restarting via sticky intent")
-        syncHandler.removeCallbacks(syncRunnable)
+        Log.w(TAG, "TrackdSentinelService destroyed - scheduling restart")
+        scheduleRestart(3_000L)
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        Log.i(TAG, "Task removed from recents - sentinel service remains active")
-        FirestoreSync.startCommandListener(this)
+        Log.i(TAG, "Task removed from recents - sentinel service scheduling immediate restart")
+        scheduleRestart(1_000L)
+    }
+
+    private fun scheduleRestart(delayMs: Long) {
         try {
             val restartIntent = Intent(applicationContext, TrackdSentinelService::class.java).also {
                 it.setPackage(packageName)
             }
-            val pendingIntent = PendingIntent.getService(
-                this, 1, restartIntent,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-            )
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                PendingIntent.getForegroundService(applicationContext, 1, restartIntent, flags)
+            } else {
+                PendingIntent.getService(applicationContext, 1, restartIntent, flags)
+            }
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager
-            alarmManager?.set(
-                android.app.AlarmManager.ELAPSED_REALTIME,
-                android.os.SystemClock.elapsedRealtime() + 1000,
-                pendingIntent
-            )
+            val triggerAt = android.os.SystemClock.elapsedRealtime() + delayMs
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || (alarmManager?.canScheduleExactAlarms() == true)
+                if (canExact) {
+                    alarmManager?.setExactAndAllowWhileIdle(
+                        android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                } else {
+                    alarmManager?.setAndAllowWhileIdle(
+                        android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        triggerAt,
+                        pendingIntent
+                    )
+                }
+            } else {
+                alarmManager?.set(
+                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    triggerAt,
+                    pendingIntent
+                )
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to schedule restart alarm onTaskRemoved", e)
+            Log.e(TAG, "Failed to schedule restart alarm", e)
         }
     }
 
@@ -119,11 +134,11 @@ class TrackdSentinelService : Service() {
             .build()
 
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // Android 14+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10+ location FGS
                 startForeground(
                     NOTIFICATION_ID, 
                     notification, 
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)

@@ -24,6 +24,78 @@ object FirestoreSync {
         return format.format(Date())
     }
 
+    private const val PREF_OFFLINE_QUEUE = "offline_telemetry_queue"
+    private const val MAX_OFFLINE_ITEMS = 25
+
+    private fun enqueueOfflineWrite(
+        context: Context,
+        lat: Double?,
+        lng: Double?,
+        accuracy: Int?,
+        battery: Int,
+        reason: String,
+        timestamp: String
+    ) {
+        try {
+            val prefs = context.getSharedPreferences("trackd_offline_sync", Context.MODE_PRIVATE)
+            val currentRaw = prefs.getString(PREF_OFFLINE_QUEUE, "[]") ?: "[]"
+            val array = org.json.JSONArray(currentRaw)
+            val item = org.json.JSONObject().apply {
+                if (lat != null) put("lat", lat)
+                if (lng != null) put("lng", lng)
+                if (accuracy != null) put("accuracy", accuracy)
+                put("battery", battery)
+                put("reason", reason)
+                put("timestamp", timestamp)
+            }
+            array.put(item)
+            val trimmed = if (array.length() > MAX_OFFLINE_ITEMS) {
+                val newArr = org.json.JSONArray()
+                val start = array.length() - MAX_OFFLINE_ITEMS
+                for (i in start until array.length()) {
+                    newArr.put(array.get(i))
+                }
+                newArr
+            } else array
+            prefs.edit().putString(PREF_OFFLINE_QUEUE, trimmed.toString()).apply()
+            Log.i(TAG, "Cached telemetry offline (queue length: ${trimmed.length()})")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to enqueue offline telemetry", e)
+        }
+    }
+
+    private fun flushOfflineQueue(context: Context, db: FirebaseFirestore, deviceId: String, userId: String) {
+        try {
+            val prefs = context.getSharedPreferences("trackd_offline_sync", Context.MODE_PRIVATE)
+            val raw = prefs.getString(PREF_OFFLINE_QUEUE, null) ?: return
+            val array = org.json.JSONArray(raw)
+            if (array.length() == 0) return
+
+            Log.i(TAG, "Flushing ${array.length()} queued offline telemetry points")
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val logEntry = hashMapOf<String, Any>(
+                    "deviceId" to deviceId,
+                    "userId" to userId,
+                    "battery" to obj.optInt("battery", 0),
+                    "triggerReason" to obj.optString("reason", "OFFLINE_FLUSH"),
+                    "timestamp" to obj.optString("timestamp", isoNow()),
+                    "offlineCached" to true
+                )
+                if (obj.has("lat") && obj.has("lng")) {
+                    logEntry["lat"] = obj.getDouble("lat")
+                    logEntry["lng"] = obj.getDouble("lng")
+                    logEntry["accuracy"] = obj.optInt("accuracy", 0)
+                }
+                db.collection("telemetry_logs").add(logEntry)
+            }
+            prefs.edit().remove(PREF_OFFLINE_QUEUE).apply()
+            Log.i(TAG, "Offline telemetry queue flushed successfully")
+        } catch (e: Exception) {
+            Log.w(TAG, "Error flushing offline telemetry queue", e)
+        }
+    }
+
     fun writeTelemetry(
         context: Context,
         lat: Double?,
@@ -33,18 +105,19 @@ object FirestoreSync {
     ): Boolean {
         val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
         val userId = AegisState.getString(context, AegisState.KEY_USER_ID)
+        val battery = readBattery(context)
+        val timestamp = isoNow()
+        val accuracyValue = accuracy ?: 0
+
         if (deviceId.isNullOrBlank() || userId.isNullOrBlank()) {
             Log.w(TAG, "device or user not configured; telemetry skipped")
             return false
         }
         if (FirebaseAuth.getInstance().currentUser == null) {
-            Log.w(TAG, "not signed in; telemetry skipped")
+            Log.w(TAG, "not signed in; queueing telemetry offline ($reason)")
+            enqueueOfflineWrite(context, lat, lng, accuracy, battery, reason, timestamp)
             return false
         }
-
-        val battery = readBattery(context)
-        val timestamp = isoNow()
-        val accuracyValue = accuracy ?: 0
 
         return try {
             val db = FirebaseFirestore.getInstance()
@@ -86,9 +159,12 @@ object FirestoreSync {
                 if (lat != null && lng != null) "telemetry written ($reason)"
                 else "heartbeat written without fix ($reason)"
             )
+            // On successful live write, flush any previously queued offline data points
+            flushOfflineQueue(context, db, deviceId, userId)
             true
         } catch (error: Throwable) {
-            Log.w(TAG, "telemetry write failed", error)
+            Log.w(TAG, "telemetry write failed; queueing locally", error)
+            enqueueOfflineWrite(context, lat, lng, accuracy, battery, reason, timestamp)
             false
         }
     }

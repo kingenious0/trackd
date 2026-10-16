@@ -1,22 +1,25 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { User } from 'firebase/auth';
 import { 
   Crosshair, Volume2, ShieldCheck, Lock, Trash2, 
-  Battery, Copy, Check, ChevronUp, ChevronDown, 
+  Battery, Check, ChevronUp, ChevronDown, 
   LogOut, MapPin, Signal, Clock, Compass, Layers, 
-  Plus, Minus, ExternalLink, MonitorPlay, Loader2
+  Plus, Minus, ExternalLink, MonitorPlay, Loader2,
+  MessageSquare, Copy, Settings2, KeyRound, Phone, X
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
   subscribeDevices, subscribeTelemetry, updateDevice, 
-  wakeDevice, type Device, type TelemetryLog 
+  wakeDevice, fetchProfile, saveProfile, type Device, type TelemetryLog 
 } from '../lib/api';
 import { auth } from '../lib/firebase';
 import { DEMO_USER_ID, demoAppendTelemetry, demoDelay, demoReset } from '../lib/demo';
 import { formatLastSeen } from '../lib/format';
 import { getAreaName } from '../lib/geo';
+import { decryptPin, encryptPin, sha256Hex, toUnsignedE164 } from '../lib/crypto';
+import { Capacitor } from '@capacitor/core';
 import WipeDialog from './WipeDialog';
 import Navbar from './Navbar';
 
@@ -35,12 +38,12 @@ const createApplePin = (isStolen: boolean) =>
     html: `
       <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px;">
         <div style="position: absolute; width: 48px; height: 48px; border-radius: 9999px; background: ${
-          isStolen ? 'rgba(239, 68, 68, 0.25)' : 'rgba(37, 99, 235, 0.22)'
+          isStolen ? 'rgba(239, 68, 68, 0.35)' : 'rgba(0, 242, 157, 0.35)'
         }; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
         <div style="position: relative; width: 26px; height: 26px; border-radius: 9999px; background: ${
-          isStolen ? '#DC2626' : '#2563EB'
-        }; border: 3.5px solid #FFFFFF; box-shadow: 0 4px 14px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center;">
-          <div style="width: 8px; height: 8px; border-radius: 9999px; background: white;"></div>
+          isStolen ? '#EF4444' : '#00F29D'
+        }; border: 3.5px solid #FFFFFF; box-shadow: 0 4px 16px rgba(0, 242, 157, 0.4); display: flex; align-items: center; justify-content: center;">
+          <div style="width: 8px; height: 8px; border-radius: 9999px; background: ${isStolen ? '#FFFFFF' : '#070B14'};"></div>
         </div>
       </div>
     `,
@@ -97,7 +100,6 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
   const [telemetry, setTelemetry] = useState<TelemetryLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [showWipeDialog, setShowWipeDialog] = useState(false);
   const ENABLE_REMOTE_WIPE_V2 = false; // Remote Factory Wipe held for V2 (code preserved)
   const [dispatching, setDispatching] = useState<string | null>(null);
@@ -105,6 +107,119 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
   const [darkMapMode, setDarkMapMode] = useState(false);
   const [areaName, setAreaName] = useState<string>('Resolving location…');
   const [showSmsDirectives, setShowSmsDirectives] = useState(false);
+  const [smsStates, setSmsStates] = useState<Record<string, 'idle'|'busy'|'sent'|'copied'|'error'>>({});
+  const [smsError, setSmsError] = useState<string | null>(null);
+  const [profilePhone, setProfilePhone] = useState<string>('');
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupPhone, setSetupPhone] = useState('');
+  const [setupPin, setSetupPin] = useState('');
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  // Load profile phone number on start
+  useEffect(() => {
+    if (!user) return;
+    fetchProfile(user.uid).then((p) => {
+      if (p?.phoneNumber) {
+        setProfilePhone(p.phoneNumber);
+        setSetupPhone(p.phoneNumber);
+      }
+    }).catch(() => {});
+  }, [user]);
+
+  const canOpenSmsLink = useCallback(() => {
+    if (Capacitor.isNativePlatform()) return true;
+    return /android|iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+  }, []);
+
+  const handleSaveSmsCredentials = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!user) return;
+    if (!setupPhone.trim()) { setSetupError('Phone number is required'); return; }
+    if (!/^\d{4}$/.test(setupPin)) { setSetupError('A 4-digit Master Recovery PIN is required'); return; }
+    setSetupSaving(true);
+    setSetupError(null);
+    try {
+      const [pinHash, pinBlob] = await Promise.all([
+        sha256Hex(setupPin),
+        encryptPin(setupPin, user.uid)
+      ]);
+      const formattedPhone = toUnsignedE164(setupPhone);
+      await saveProfile(user.uid, {
+        phoneNumber: formattedPhone,
+        masterPinHash: pinHash,
+        encryptedPin: pinBlob
+      });
+      setProfilePhone(formattedPhone);
+      setShowSetupModal(false);
+      setSmsError(null);
+      setSetupPin('');
+      setActionNotice(`SIM phone (${formattedPhone}) and PIN securely configured.`);
+    } catch (err) {
+      setSetupError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const handleSmsSend = useCallback(async (template: string) => {
+    if (demo) { setSmsError('SMS send unavailable in demo mode.'); return; }
+    if (!user) { setSmsError('Sign in to use one-tap SMS.'); return; }
+    setSmsStates(p => ({ ...p, [template]: 'busy' }));
+    setSmsError(null);
+    try {
+      const profile = await fetchProfile(user.uid);
+      const isMobile = canOpenSmsLink();
+
+      let pin = '';
+      if (profile?.encryptedPin) {
+        pin = (await decryptPin(profile.encryptedPin, user.uid)) ?? '';
+      }
+
+      if (isMobile) {
+        // Mobile requires phone number to open SMS composer
+        if (!profile?.phoneNumber) {
+          setShowSetupModal(true);
+          setSmsError('Please set your device phone number and PIN first.');
+          setSmsStates(p => ({ ...p, [template]: 'error' }));
+          return;
+        }
+        if (!pin) {
+          setShowSetupModal(true);
+          setSmsError('Please save your 4-digit PIN below to enable 1-tap SMS.');
+          setSmsStates(p => ({ ...p, [template]: 'error' }));
+          return;
+        }
+        const smsBody = `${template}${pin}`;
+        const phone = profile.phoneNumber;
+        const sep = Capacitor.getPlatform() === 'android' ? '?' : '&';
+        window.open(`sms:${phone}${sep}body=${encodeURIComponent(smsBody)}`, '_self');
+        setSmsStates(p => ({ ...p, [template]: 'sent' }));
+      } else {
+        // Desktop: copy command to clipboard
+        if (pin) {
+          const smsBody = `${template}${pin}`;
+          await navigator.clipboard.writeText(smsBody);
+          setSmsStates(p => ({ ...p, [template]: 'copied' }));
+          if (profile?.phoneNumber) {
+            setActionNotice(`Copied with PIN: ${template}**** (Send via SMS to ${profile.phoneNumber})`);
+          } else {
+            setActionNotice(`Copied with PIN: ${template}****`);
+          }
+        } else {
+          // If PIN is not stored yet, copy template and invite user to save PIN
+          await navigator.clipboard.writeText(template);
+          setSmsStates(p => ({ ...p, [template]: 'copied' }));
+          setShowSetupModal(true);
+          setSmsError('Command copied. Save your 4-digit PIN below to automatically embed it next time!');
+        }
+      }
+    } catch (e) {
+      setSmsError(e instanceof Error ? e.message : 'Error sending SMS.');
+      setSmsStates(p => ({ ...p, [template]: 'error' }));
+    }
+    setTimeout(() => setSmsStates(p => ({ ...p, [template]: 'idle' })), 2500);
+  }, [user, demo, canOpenSmsLink]);
 
   const userId = demo ? DEMO_USER_ID : user?.uid ?? 'demo-user';
   const email = demo ? 'demo@trackd.local' : user?.email ?? 'Operator';
@@ -115,11 +230,22 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     const unsub = subscribeDevices(
       userId,
       (incoming) => {
-        setDevices(incoming);
+        // Deduplicate devices by hardware deviceId or unique deviceName to eliminate phantom duplicates
+        const seen = new Set<string>();
+        const deduped: Device[] = [];
+        for (const d of incoming) {
+          const key = d.id || d.deviceName;
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(d);
+          }
+        }
+
+        setDevices(deduped);
         setSelectedDevice((prev) => {
-          if (!prev) return incoming[0] ?? null;
-          const match = incoming.find((d) => d.id === prev.id);
-          return match ?? incoming[0] ?? null;
+          if (!prev) return deduped[0] ?? null;
+          const match = deduped.find((d) => d.id === prev.id);
+          return match ?? deduped[0] ?? null;
         });
         setLoading(false);
       },
@@ -221,12 +347,6 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     }
   };
 
-  const copySms = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(code);
-    setTimeout(() => setCopiedCode(null), 2000);
-  };
-
   const handleSignOut = () => {
     if (demo && onExitDemo) {
       onExitDemo();
@@ -239,6 +359,12 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     auth()?.signOut();
   };
 
+  // Heartbeat offline rule: if last seen > 10 minutes ago, mark offline
+  const lastSeenMs = selectedDevice?.lastSeenAt ? new Date(selectedDevice.lastSeenAt).getTime() : 0;
+  const isOffline = !demo && (lastSeenMs > 0 ? (Date.now() - lastSeenMs) > (10 * 60 * 1000) : false);
+
+  // Google Maps turn-by-turn directions deep link
+  const googleDirectionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${currentCoords[0]},${currentCoords[1]}`;
   const googleMapsUrl = `https://www.google.com/maps?q=${currentCoords[0]},${currentCoords[1]}`;
 
   return (
@@ -344,11 +470,11 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
         {/* 2. Apple Maps Floating Command Card (Desktop: Left Float / Mobile: Bottom Sheet) */}
         <div className={`
           absolute z-[1100] transition-all duration-500 ease-out
-          md:top-4 md:left-6 md:bottom-auto md:right-auto md:w-[390px] md:max-h-[calc(100%-2rem)]
+          md:top-4 md:left-6 md:bottom-auto md:right-auto md:w-[390px] md:max-h-[calc(100%-2rem)] md:flex md:flex-col
           bottom-0 left-0 right-0 w-full
           ${mobileDrawerOpen ? 'h-[85vh]' : 'h-24 md:h-auto'}
         `}>
-        <div className="h-full flex flex-col rounded-t-[32px] md:rounded-[28px] bg-slate-900/85 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.55)] overflow-hidden">
+        <div className="h-full min-h-0 flex-1 flex flex-col rounded-t-[32px] md:rounded-[28px] bg-slate-900/85 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.55)] overflow-hidden">
           
           {/* Mobile Drag Indicator */}
           <div 
@@ -370,7 +496,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
           </div>
 
           {/* Scrollable Command Workspace */}
-          <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-4 md:space-y-5">
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 md:p-6 space-y-4 md:space-y-5">
             
             {/* Header / Identity Pill */}
             <div className="hidden md:flex items-center justify-between">
@@ -411,7 +537,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             {/* Device Selector Pills if multiple devices exist */}
             {loading ? (
               <div className="flex items-center gap-2 p-3 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-[#00F29D]" />
                 <span>Connecting to phone…</span>
               </div>
             ) : devices.length > 1 ? (
@@ -426,7 +552,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                       onClick={() => setSelectedDevice(device)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-medium transition ${
                         device.id === selectedDevice?.id
-                          ? 'bg-blue-600 text-white font-semibold shadow-md shadow-blue-600/30'
+                          ? 'bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold shadow-md shadow-[#00F29D]/20'
                           : 'bg-white/[0.04] text-slate-400 hover:text-white border border-white/5'
                       }`}
                     >
@@ -445,9 +571,9 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
               >
                 {dispatching === 'LOCATE' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#00F29D]" />
                 ) : (
-                  <Crosshair className="w-4 h-4 text-slate-300" />
+                  <Crosshair className="w-4 h-4 text-[#00F29D]" />
                 )}
                 Locate Live
               </button>
@@ -458,29 +584,62 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
               >
                 {dispatching === 'SIREN' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
                 ) : (
-                  <Volume2 className="w-4 h-4 text-slate-300" />
+                  <Volume2 className="w-4 h-4 text-amber-400" />
                 )}
                 Play Sound
               </button>
             </div>
 
+            {/* Directions in Google Maps Action Button */}
+            <a
+              href={googleDirectionsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00F29D]/15 to-[#00C888]/15 hover:from-[#00F29D]/25 hover:to-[#00C888]/25 border border-[#00F29D]/30 text-[#00F29D] font-semibold text-xs flex items-center justify-center gap-2 transition active:scale-[0.98]"
+            >
+              <Compass className="w-4 h-4 text-[#00F29D]" />
+              <span>Get Directions in Google Maps</span>
+              <ExternalLink className="w-3 h-3 opacity-60" />
+            </a>
+
+            {/* Offline Detection Banner - Bridges Web directly to SMS */}
+            {isOffline && (
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-amber-400">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0" />
+                  <span>Data connection lost (Offline)</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  The thief may have switched off Wi-Fi or Mobile Data. Send an offline SMS command from any borrowed phone to force a background satellite GPS reply:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleSmsSend('#LOCATE#')}
+                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-[#070B14] font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 transition"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>{canOpenSmsLink() ? 'Send #LOCATE# via SMS' : 'Copy #LOCATE# Command'}</span>
+                </button>
+              </div>
+            )}
+
             {/* Tactical Status Cards with Real Reverse Geocoding */}
-            <div className="rounded-2xl bg-white/[0.03] border border-white/5 p-4 space-y-3">
+            <div className="rounded-2xl bg-[#0D1322] border border-white/10 p-4 space-y-3">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <MapPin className="w-4 h-4 text-blue-400 shrink-0" />
+                  <MapPin className="w-4 h-4 text-[#00F29D] shrink-0" />
                   <span>Area Location</span>
                 </div>
-                <span className="font-medium text-emerald-400 max-w-[190px] text-right truncate" title={areaName}>
+                <span className="font-medium text-[#00F29D] max-w-[210px] text-right truncate" title={areaName}>
                   {areaName}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <Compass className="w-4 h-4 text-blue-400 shrink-0" />
+                  <Compass className="w-4 h-4 text-[#00F29D] shrink-0" />
                   <span>Fix Coordinates</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -491,7 +650,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                     href={googleMapsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-blue-400 hover:text-blue-300"
+                    className="text-[#00F29D] hover:text-[#00DCA0]"
                     title="Open in Maps"
                   >
                     <ExternalLink className="w-3 h-3" />
@@ -501,13 +660,20 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
 
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 text-slate-400">
-                  <Signal className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <Signal className={`w-4 h-4 shrink-0 ${isOffline ? 'text-amber-400' : 'text-emerald-400'}`} />
                   <span>Status</span>
                 </div>
-                <span className="font-medium text-emerald-400 flex items-center gap-1.5 text-xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Online
-                </span>
+                {isOffline ? (
+                  <span className="font-medium text-amber-400 flex items-center gap-1.5 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    Offline (Heartbeat Stale)
+                  </span>
+                ) : (
+                  <span className="font-medium text-emerald-400 flex items-center gap-1.5 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Online (Live Socket)
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center justify-between text-xs">
@@ -523,8 +689,8 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
 
             {/* Action Feedback Banner */}
             {actionNotice && (
-              <div className="p-3 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs flex items-start gap-2">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+              <div className="p-3 rounded-2xl bg-[#00F29D]/10 border border-[#00F29D]/30 text-[#00F29D] text-xs flex items-start gap-2">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00F29D] mt-1.5 shrink-0" />
                 <span>{actionNotice}</span>
               </div>
             )}
@@ -573,54 +739,95 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
 
             {/* Offline SMS Fail-Safe Collapsible Accordion */}
             <div className="pt-2 border-t border-white/5">
-              <button
-                type="button"
-                onClick={() => setShowSmsDirectives(!showSmsDirectives)}
-                className="w-full flex items-center justify-between py-2 text-left text-slate-400 hover:text-slate-200 transition group"
-              >
-                <span className="text-xs font-medium text-slate-300 group-hover:text-white transition">
-                  No internet? Use SMS commands instead
-                </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showSmsDirectives ? 'rotate-180' : ''}`} />
-              </button>
+              <div className="flex items-center justify-between py-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSmsDirectives(!showSmsDirectives)}
+                  className="flex items-center gap-2 text-left text-slate-400 hover:text-slate-200 transition group flex-1"
+                >
+                  <span className="text-xs font-medium text-slate-300 group-hover:text-white transition">
+                    No internet? Use SMS commands instead
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${showSmsDirectives ? 'rotate-180' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSetupModal(true)}
+                  className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] text-slate-400 hover:text-[#00F29D] border border-white/5 flex items-center gap-1 transition"
+                  title="Configure SIM phone number and PIN"
+                >
+                  <Settings2 className="w-3 h-3" />
+                  <span>{profilePhone ? profilePhone : 'Set SIM & PIN'}</span>
+                </button>
+              </div>
 
               {showSmsDirectives && (
                 <div className="space-y-2 pt-2">
-                  <span className="text-[10px] text-slate-500 font-mono block">Zero internet required · Send directly to handset</span>
-                  {[
-                    { label: 'Force Location Fix', code: '#LOCATE#PIN', template: '#LOCATE#' },
-                    { label: 'Trigger Sound Siren', code: '#SIREN#PIN', template: '#SIREN#' },
-                    { label: 'Silence Siren', code: '#SILENCE#PIN', template: '#SILENCE#' },
-                    { label: 'Engage Theft Lock', code: '#STOLEN#PIN', template: '#STOLEN#' },
-                    { label: 'Disarm Theft Lock', code: '#SAFE#PIN', template: '#SAFE#' }
-                  ].map((sms, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs font-mono">
-                      <div>
-                        <span className="text-slate-400 text-[10px] block">{sms.label}</span>
-                        <div className="flex items-baseline gap-1 mt-0.5">
-                          <span className="text-blue-400 font-bold">{sms.template}</span>
-                          <span className="text-emerald-400 font-bold bg-emerald-500/10 px-1 py-0.5 rounded text-[11px]">YOUR_PIN</span>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => copySms(sms.code)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-slate-300 hover:text-white transition bg-white/[0.04] border border-white/5 text-[11px]"
-                        title="Copy command template"
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-mono block">Zero internet required · Send directly to handset</span>
+                    {!profilePhone && (
+                      <button
+                        onClick={() => setShowSetupModal(true)}
+                        className="text-[10px] text-[#00F29D] hover:underline font-semibold"
                       >
-                        {copiedCode === sms.code ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400 text-[10px] font-sans">Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span className="text-[10px] font-sans">Copy</span>
-                          </>
-                        )}
+                        + Add SIM number
+                      </button>
+                    )}
+                  </div>
+                  {smsError && (
+                    <div className="px-3 py-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] flex items-center justify-between">
+                      <span>{smsError}</span>
+                      <button 
+                        onClick={() => setShowSetupModal(true)}
+                        className="underline font-semibold ml-2 text-rose-300 hover:text-white text-[10px]"
+                      >
+                        Set PIN
                       </button>
                     </div>
-                  ))}
+                  )}
+                  {[
+                    { label: 'Force Location Fix',  template: '#LOCATE#' },
+                    { label: 'Trigger Sound Siren', template: '#SIREN#' },
+                    { label: 'Silence Siren',        template: '#SILENCE#' },
+                    { label: 'Engage Theft Lock',   template: '#STOLEN#' },
+                    { label: 'Disarm Theft Lock',   template: '#SAFE#' }
+                  ].map((sms) => {
+                    const st = smsStates[sms.template] ?? 'idle';
+                    const busy = st === 'busy';
+                    const isMobile = canOpenSmsLink();
+                    return (
+                      <div key={sms.template} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5 text-xs font-mono">
+                        <div>
+                          <span className="text-slate-400 text-[10px] block">{sms.label}</span>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className="text-[#00F29D] font-bold">{sms.template}</span>
+                            {/* PIN always masked */}
+                            <span className="text-amber-400 font-bold tracking-widest">****</span>
+                          </div>
+                          {st === 'sent'   && <span className="text-emerald-400 text-[10px] font-sans">SMS composer opened ✓</span>}
+                          {st === 'copied' && <span className="text-emerald-400 text-[10px] font-sans">Copied with PIN ✓</span>}
+                        </div>
+                        <button
+                          onClick={() => handleSmsSend(sms.template)}
+                          disabled={busy}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition text-[11px] font-sans border ${
+                            busy
+                              ? 'opacity-50 cursor-wait bg-white/[0.04] text-slate-400 border-white/5'
+                              : isMobile
+                                ? 'bg-[#00F29D]/15 text-[#00F29D] hover:bg-[#00F29D]/25 border-[#00F29D]/30 font-semibold'
+                                : 'bg-white/[0.04] text-slate-300 hover:text-white hover:bg-white/10 border-white/5'
+                          }`}
+                          title={isMobile ? 'Send via SMS' : 'Copy command with PIN'}
+                        >
+                          {isMobile ? (
+                            <><MessageSquare className="w-3.5 h-3.5" />{busy ? '…' : st === 'sent' ? 'Sent' : 'Send'}</>
+                          ) : (
+                            <><Copy className="w-3.5 h-3.5" />{busy ? '…' : st === 'copied' ? <><Check className="w-3 h-3 text-emerald-400" />Copied</> : 'Copy'}</>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -629,6 +836,93 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
         </div>
       </div>
       </div>
+
+      {/* Configure Device SIM & PIN Modal */}
+      {showSetupModal && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-3xl bg-[#0D1322] border border-white/10 p-5 shadow-2xl space-y-4 ring-1 ring-white/5">
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-[#00F29D]/15 text-[#00F29D]">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Device SIM & PIN</h3>
+                  <p className="text-[11px] text-slate-400">Stored securely for 1-tap SMS commands</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowSetupModal(false); setSetupError(null); }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSmsCredentials} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Device Phone Number (SIM in tracked device)
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                  <input
+                    type="tel"
+                    value={setupPhone}
+                    onChange={(e) => setSetupPhone(e.target.value)}
+                    placeholder="+233 24 000 0000"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#070B14] border border-white/10 text-white text-xs placeholder:text-slate-600 focus:outline-none focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                  Master Recovery PIN (4 digits)
+                </label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+                  <input
+                    type="password"
+                    maxLength={4}
+                    value={setupPin}
+                    onChange={(e) => setSetupPin(e.target.value.replace(/\D/g, ''))}
+                    placeholder="4 digits (e.g. 1234)"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-[#070B14] border border-white/10 text-white text-xs font-mono tracking-widest placeholder:text-slate-600 focus:outline-none focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Encrypted client-side with AES-256 before saving to your profile.
+                </p>
+              </div>
+
+              {setupError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                  {setupError}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSetupModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 text-xs font-medium transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={setupSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] disabled:opacity-50 shadow-md shadow-[#00F29D]/20"
+                >
+                  {setupSaving && <Loader2 className="w-3.5 h-3.5 animate-spin text-[#070B14]" />}
+                  Save Credentials
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Factory Wipe Confirmation Modal */}
       {showWipeDialog && (

@@ -13,12 +13,12 @@ html.light {
 }
 
 html.dark {
-  --c-app: 20 22 26;
-  --c-panel: 30 32 37;
-  --c-raised: 41 44 50;
-  --c-ink: 232 234 237;
-  --c-muted: 154 160 166;
-  --c-line: 57 60 66;
+  --c-app: 7 11 20;
+  --c-panel: 13 19 34;
+  --c-raised: 20 29 51;
+  --c-ink: 241 245 249;
+  --c-muted: 148 163 184;
+  --c-line: 30 41 69;
 }
 
 @layer base {
@@ -55,7 +55,7 @@ html.dark {
     @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-solid {
-    @apply btn bg-accent text-white hover:brightness-110;
+    @apply btn bg-gradient-to-r from-[#00F29D] to-[#00DCA0] text-[#070B14] font-bold shadow-lg shadow-[#00F29D]/20 hover:shadow-[#00F29D]/40 hover:brightness-105 active:scale-[0.98];
   }
   .btn-outline {
     @apply btn border border-line bg-panel text-ink hover:bg-raised;
@@ -67,10 +67,10 @@ html.dark {
     @apply btn border border-danger/40 bg-panel text-danger hover:bg-danger/10;
   }
   .btn-secure {
-    @apply btn bg-secure text-white hover:brightness-110;
+    @apply btn bg-[#00F29D] text-[#070B14] font-bold hover:brightness-110 shadow-lg shadow-[#00F29D]/20;
   }
   .input {
-    @apply w-full rounded-xl border border-line bg-panel px-4 py-3 text-sm text-ink placeholder-muted outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+    @apply w-full rounded-xl border border-line bg-panel px-4 py-3 text-sm text-ink placeholder-muted outline-none focus:border-[#00F29D] focus:ring-2 focus:ring-[#00F29D]/25;
   }
   .pill {
     @apply inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium backdrop-blur;

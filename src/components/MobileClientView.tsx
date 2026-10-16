@@ -13,11 +13,13 @@ import {
   CheckCircle2, ChevronRight, ChevronLeft, ChevronUp, Eye, EyeOff, AlertTriangle, X, 
   LogOut, Loader2, Smartphone, 
   PhoneCall, Fingerprint, Delete, Check,
-  Settings as SettingsIcon, Battery, Contact
+  Settings as SettingsIcon, Battery, Contact, Copy, Terminal
 } from 'lucide-react';
 import { TrackdBridge, type LinkState } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
-import { createDevice, subscribeDevice } from '../lib/api';
+import { createDevice, subscribeDevice, fetchProfile, fetchDevices } from '../lib/api';
+import { SMS_COMMANDS } from '../lib/types';
+import TrackdLogo from './TrackdLogo';
 
 interface Props {
   user?: User | null;
@@ -121,6 +123,10 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
   // Protection Details Sheet (Hero tap / 6 segments tap)
   const [protectionDetailsOpen, setProtectionDetailsOpen] = useState(false);
+
+  // SMS Commands Bottom Sheet
+  const [smsCommandsOpen, setSmsCommandsOpen] = useState(false);
+  const [smsActionState, setSmsActionState] = useState<{ [cmd: string]: 'idle' | 'copied' | 'sent' }>({});
 
   // Settings Sheet Auto-Lock Countdown (60s)
   const [autoLockSeconds, setAutoLockSeconds] = useState(60);
@@ -235,8 +241,8 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       if (linkRes) {
         setLinkState(linkRes);
         if (linkRes.configured && !localStorage.getItem('trackd_onboarding_complete')) {
-          setWizardStep((prev) => (prev === 1 ? 2 : prev));
-          setForceSetupWizard(true);
+          localStorage.setItem('trackd_onboarding_complete', 'true');
+          setOnboardingComplete(true);
         }
       }
     } catch (e) {
@@ -532,6 +538,56 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         uid = 'demo_user_' + Date.now();
       }
 
+      if (!isSignUp) {
+        // Returning user sign in: link device and skip onboarding
+        let targetDeviceId = '';
+        if (isConfigured && uid) {
+          const [profile, devices] = await Promise.all([
+            fetchProfile(uid).catch(() => null),
+            fetchDevices(uid).catch(() => [])
+          ]);
+
+          if (devices.length > 0) {
+            targetDeviceId = devices[0].id;
+            setDeviceName(devices[0].deviceName);
+          } else {
+            targetDeviceId = await createDevice(uid, {
+              deviceName: deviceNameInput.trim() || deviceName,
+              deviceModel: deviceName,
+            });
+          }
+
+          if (profile?.emergencyContactPhone) {
+            setEmergencyPhone(profile.emergencyContactPhone);
+            localStorage.setItem('trackd_emergency_phone', profile.emergencyContactPhone);
+          }
+          if (profile?.masterPinHash) {
+            setHasPinConfigured(true);
+          }
+        } else {
+          targetDeviceId = 'dev_' + Math.random().toString(36).substring(2, 9);
+        }
+
+        await TrackdBridge.configureAccount({
+          email: emailInput.trim(),
+          password: passwordInput,
+          deviceId: targetDeviceId,
+          projectId: projectId || 'trackd-local',
+        });
+
+        const next = await TrackdBridge.getLinkState();
+        setLinkState(next);
+        triggerHaptic('success');
+
+        // Returning user: mark onboarding as complete and go to main shield
+        localStorage.setItem('trackd_onboarding_complete', 'true');
+        setOnboardingComplete(true);
+        setForceSetupWizard(false);
+        checkStatus();
+        return;
+      }
+
+      // Brand new user sign up: proceed through setup wizard
       let targetDeviceId = '';
       if (isConfigured && uid) {
         targetDeviceId = await createDevice(uid, {
@@ -552,7 +608,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       const next = await TrackdBridge.getLinkState();
       setLinkState(next);
       triggerHaptic('success');
-      // Advance to Step 2 (Device Name) and ensure wizard remains active
+      // Advance to Step 2 (Device Name) for brand new users
       setWizardStep(2);
       setForceSetupWizard(true);
     } catch (err: unknown) {
@@ -820,7 +876,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // =========================================================================
   if (currentViewState === 'setup') {
     return (
-      <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-5 pt-3 pb-5 max-w-sm mx-auto justify-between bg-[#121316] text-white select-none overflow-hidden font-sans">
+      <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-5 pt-3 pb-5 max-w-sm mx-auto justify-between bg-[#070B14] text-white select-none overflow-hidden font-sans">
         
         {/* Progress Bar Line at Top (6 Segments) */}
         <div className="w-full pt-1 shrink-0">
@@ -829,31 +885,35 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               <div 
                 key={stepNum}
                 className={`h-1 flex-1 rounded-full transition-all duration-300 ${
-                  stepNum <= wizardStep ? 'bg-[#3B82F6]' : 'bg-white/10'
+                  stepNum <= wizardStep ? 'bg-[#00F29D] shadow-sm shadow-[#00F29D]/40' : 'bg-white/10'
                 }`}
               />
             ))}
           </div>
         </div>
 
-        {/* STEP 1: Sign in / Create Account (Matching Reference Image 1 & 2) */}
+        {/* STEP 1: Sign in / Create Account */}
         {wizardStep === 1 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            {/* Top Shield Mark */}
-            <div className="w-12 h-12 rounded-2xl bg-[#1C1D21] border border-white/5 flex items-center justify-center mb-4 shadow-md">
-              <Shield className="w-6 h-6 text-[#3B82F6]" />
+            {/* Top Official Emblem */}
+            <div className="w-14 h-14 rounded-2xl overflow-hidden mb-4 shadow-xl shadow-[#00F29D]/20 ring-1 ring-[#00F29D]/30 bg-[#070B14]">
+              <img src="/official_icon.jpeg" alt="Trackd" className="w-full h-full object-cover scale-105" />
             </div>
 
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              {isSignUp ? 'Create your Trackd account' : 'Welcome back'}
+            <h1 className="text-2xl font-black text-white tracking-tight">
+              {isSignUp ? (
+                <>Create your Track<span className="text-[#00F29D]">d</span> account</>
+              ) : (
+                <>Welcome back to Track<span className="text-[#00F29D]">d</span></>
+              )}
             </h1>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Use this same account on the Trackd website to find this phone if it is ever lost.
+              Use this account on any browser to locate this phone if it is ever lost or SIM-swapped.
             </p>
 
             {/* Error Message */}
             {authError && (
-              <div className="mt-4 mb-2 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
+              <div className="mt-4 mb-2 p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300">
                 {authError}
               </div>
             )}
@@ -870,7 +930,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder-slate-500 focus:border-[#3B82F6] focus:outline-none transition"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0D1322] border border-white/10 text-xs text-white placeholder-slate-500 focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30 focus:outline-none transition"
                 />
               </div>
 
@@ -884,7 +944,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder-slate-500 focus:border-[#3B82F6] focus:outline-none transition pr-10"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0D1322] border border-white/10 text-xs text-white placeholder-slate-500 focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30 focus:outline-none transition pr-10"
                 />
                 <button
                   type="button"
@@ -907,7 +967,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   <button 
                     type="button" 
                     onClick={() => alert('Password reset link will be sent to ' + (emailInput || 'your email'))}
-                    className="text-[11px] text-[#3B82F6] hover:underline"
+                    className="text-[11px] text-[#00F29D] hover:underline"
                   >
                     Forgot password
                   </button>
@@ -917,11 +977,11 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold text-xs tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
               >
                 {authLoading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#070B14]" />
                     <span>Connecting...</span>
                   </>
                 ) : (
@@ -938,7 +998,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   <button 
                     type="button"
                     onClick={() => { setIsSignUp(false); setAuthError(null); }}
-                    className="text-[#3B82F6] font-semibold hover:underline"
+                    className="text-[#00F29D] font-bold hover:underline"
                   >
                     Sign In
                   </button>
@@ -949,7 +1009,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   <button 
                     type="button"
                     onClick={() => { setIsSignUp(true); setAuthError(null); }}
-                    className="text-[#3B82F6] font-semibold hover:underline"
+                    className="text-[#00F29D] font-bold hover:underline"
                   >
                     Create account
                   </button>
@@ -962,11 +1022,11 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         {/* STEP 2: Name this device */}
         {wizardStep === 2 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-[#1C1D21] border border-white/5 flex items-center justify-center mb-4 shadow-md">
-              <Smartphone className="w-6 h-6 text-[#3B82F6]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#0D1322] border border-[#00F29D]/20 flex items-center justify-center mb-4 shadow-md">
+              <Smartphone className="w-6 h-6 text-[#00F29D]" />
             </div>
 
-            <span className="text-xs font-semibold text-[#3B82F6] uppercase tracking-wider mb-1">
+            <span className="text-xs font-semibold text-[#00F29D] uppercase tracking-wider mb-1">
               Step 2 of 6
             </span>
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -982,7 +1042,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 value={deviceNameInput}
                 onChange={(e) => setDeviceNameInput(e.target.value)}
                 placeholder="Redmi Note 14 Pro"
-                className="w-full px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 text-sm text-white focus:border-[#3B82F6] focus:outline-none"
+                className="w-full px-3.5 py-3 rounded-xl bg-[#0D1322] border border-white/10 text-sm text-white focus:border-[#00F29D] focus:outline-none"
               />
             </div>
 
@@ -992,7 +1052,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 setDeviceName(deviceNameInput || deviceName);
                 setWizardStep(3);
               }}
-              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] text-xs font-bold tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98]"
             >
               Continue
             </button>
@@ -1018,11 +1078,11 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         {/* STEP 3: Offline Master PIN */}
         {wizardStep === 3 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-[#1C1D21] border border-white/5 flex items-center justify-center mb-4 shadow-md">
-              <Key className="w-6 h-6 text-[#3B82F6]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#0D1322] border border-[#00F29D]/20 flex items-center justify-center mb-4 shadow-md">
+              <Key className="w-6 h-6 text-[#00F29D]" />
             </div>
 
-            <span className="text-xs font-semibold text-[#3B82F6] uppercase tracking-wider mb-1">
+            <span className="text-xs font-semibold text-[#00F29D] uppercase tracking-wider mb-1">
               Step 3 of 6
             </span>
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -1043,7 +1103,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
-                  className="w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-xl text-white focus:border-[#3B82F6] focus:outline-none"
+                  className="w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#0D1322] border border-white/10 font-mono text-xl text-white focus:border-[#00F29D] focus:outline-none"
                 />
               </div>
 
@@ -1057,10 +1117,10 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   value={pinConfirm}
                   onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
-                  className={`w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#1C1D21] border font-mono text-xl text-white focus:outline-none ${
+                  className={`w-full text-center tracking-[0.5em] px-3.5 py-3 rounded-xl bg-[#0D1322] border font-mono text-xl text-white focus:outline-none ${
                     pinConfirm && pin !== pinConfirm 
                       ? 'border-rose-500/50 focus:border-rose-500 text-rose-300' 
-                      : 'border-white/5 focus:border-[#3B82F6]'
+                      : 'border-white/10 focus:border-[#00F29D]'
                   }`}
                 />
               </div>
@@ -1086,7 +1146,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 setWizardStep(4);
               }}
               disabled={pin.length !== 4 || pin !== pinConfirm}
-              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] disabled:opacity-40 disabled:cursor-not-allowed text-[#070B14] text-xs font-bold tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98]"
             >
               Save Master PIN
             </button>
@@ -1112,11 +1172,11 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         {/* STEP 4: Emergency Backup Phone */}
         {wizardStep === 4 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            <div className="w-12 h-12 rounded-2xl bg-[#1C1D21] border border-white/5 flex items-center justify-center mb-4 shadow-md">
-              <PhoneCall className="w-6 h-6 text-[#3B82F6]" />
+            <div className="w-12 h-12 rounded-2xl bg-[#0D1322] border border-[#00F29D]/20 flex items-center justify-center mb-4 shadow-md">
+              <PhoneCall className="w-6 h-6 text-[#00F29D]" />
             </div>
 
-            <span className="text-xs font-semibold text-[#3B82F6] uppercase tracking-wider mb-1">
+            <span className="text-xs font-semibold text-[#00F29D] uppercase tracking-wider mb-1">
               Step 4 of 6
             </span>
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -1134,9 +1194,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 className="w-full py-3 px-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 flex items-center justify-center gap-2 transition active:scale-[0.98]"
               >
                 {pickingContact ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-[#3B82F6]" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#00F29D]" />
                 ) : (
-                  <Contact className="w-4 h-4 text-[#3B82F6]" />
+                  <Contact className="w-4 h-4 text-[#00F29D]" />
                 )}
                 <span>
                   {contactPickerName ? `Selected: ${contactPickerName}` : 'Choose from Phone Contacts'}
@@ -1149,7 +1209,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   value={emergencyPhone}
                   onChange={(e) => setEmergencyPhone(e.target.value)}
                   placeholder="+233..."
-                  className="w-full px-3.5 py-3 rounded-xl bg-[#1C1D21] border border-white/5 font-mono text-sm text-white focus:border-[#3B82F6] focus:outline-none"
+                  className="w-full px-3.5 py-3 rounded-xl bg-[#0D1322] border border-white/10 font-mono text-sm text-white focus:border-[#00F29D] focus:outline-none"
                 />
               </div>
 
@@ -1170,7 +1230,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                   alert('Please enter a valid emergency contact number');
                 }
               }}
-              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] text-xs font-bold tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98]"
             >
               Save Emergency Contact
             </button>
@@ -1193,15 +1253,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           </div>
         )}
 
-        {/* STEP 5: Offline SMS Tracking (Exact Copy from Reference Image 4) */}
+        {/* STEP 5: Offline SMS Tracking */}
         {wizardStep === 5 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            {/* Blue squircle with message icon matching Reference Image 4 */}
-            <div className="w-16 h-16 rounded-3xl bg-[#1E293B] border border-[#3B82F6]/30 flex items-center justify-center mb-5 shadow-lg mx-auto">
-              <MessageSquare className="w-8 h-8 text-[#3B82F6]" />
+            <div className="w-16 h-16 rounded-3xl bg-[#0D1322] border border-[#00F29D]/30 flex items-center justify-center mb-5 shadow-lg mx-auto">
+              <MessageSquare className="w-8 h-8 text-[#00F29D]" />
             </div>
 
-            <span className="text-center text-xs font-semibold text-[#3B82F6] uppercase tracking-wider mb-1">
+            <span className="text-center text-xs font-semibold text-[#00F29D] uppercase tracking-wider mb-1">
               Step 5 of 6
             </span>
             <h1 className="text-center text-2xl font-bold text-white tracking-tight">
@@ -1227,7 +1286,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                     setWizardStep(6);
                   }
                 }}
-                className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+                className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] text-xs font-bold tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98]"
               >
                 Allow SMS access
               </button>
@@ -1255,11 +1314,11 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         {/* STEP 6: Anti-Theft Armor Elevation */}
         {wizardStep === 6 && (
           <div className="flex-1 flex flex-col justify-center py-2 animate-in fade-in duration-200">
-            <div className="w-16 h-16 rounded-3xl bg-[#1E293B] border border-[#00E699]/30 flex items-center justify-center mb-5 shadow-lg mx-auto">
-              <Shield className="w-8 h-8 text-[#00E699]" />
+            <div className="w-16 h-16 rounded-3xl bg-[#0D1322] border border-[#00F29D]/30 flex items-center justify-center mb-5 shadow-lg mx-auto">
+              <Shield className="w-8 h-8 text-[#00F29D]" />
             </div>
 
-            <span className="text-center text-xs font-semibold text-[#00E699] uppercase tracking-wider mb-1">
+            <span className="text-center text-xs font-semibold text-[#00F29D] uppercase tracking-wider mb-1">
               Step 6 of 6
             </span>
             <h1 className="text-center text-2xl font-bold text-white tracking-tight">
@@ -1269,15 +1328,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               Grants system permission to keep running in background and block thieves from powering down the device.
             </p>
 
-            <div className="mt-6 rounded-2xl bg-[#1C1D21] border border-white/5 divide-y divide-white/5 overflow-hidden text-left mb-6">
-              {/* V2: Remote Lock & Erase (Device Admin) held for V2 */}
+            <div className="mt-6 rounded-2xl bg-[#0D1322] border border-white/5 divide-y divide-white/5 overflow-hidden text-left mb-6">
               {ENABLE_REMOTE_LOCK_ERASE_V2 && (
                 <button 
                   onClick={() => TrackdBridge.requestDeviceAdmin()}
                   className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
                 >
                   <span className="text-xs text-slate-200 font-medium">Remote Lock & Erase</span>
-                  {perms.admin ? <Check className="w-4 h-4 text-[#00E699]" /> : <span className="text-[11px] text-[#3B82F6] font-semibold">Allow &gt;</span>}
+                  {perms.admin ? <Check className="w-4 h-4 text-[#00F29D]" /> : <span className="text-[11px] text-[#00F29D] font-semibold">Allow &gt;</span>}
                 </button>
               )}
               <button 
@@ -1285,14 +1343,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
               >
                 <span className="text-xs text-slate-200 font-medium">Keep App Running</span>
-                {perms.battery ? <Check className="w-4 h-4 text-[#00E699]" /> : <span className="text-[11px] text-[#3B82F6] font-semibold">Allow &gt;</span>}
+                {perms.battery ? <Check className="w-4 h-4 text-[#00F29D]" /> : <span className="text-[11px] text-[#00F29D] font-semibold">Allow &gt;</span>}
               </button>
               <button 
                 onClick={() => TrackdBridge.openAccessibilitySettings()}
                 className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-white/5 transition"
               >
                 <span className="text-xs text-slate-200 font-medium">Prevent Power Off</span>
-                {perms.accessibility ? <Check className="w-4 h-4 text-[#00E699]" /> : <span className="text-[11px] text-[#3B82F6] font-semibold">Allow &gt;</span>}
+                {perms.accessibility ? <Check className="w-4 h-4 text-[#00F29D]" /> : <span className="text-[11px] text-[#00F29D] font-semibold">Allow &gt;</span>}
               </button>
             </div>
 
@@ -1304,7 +1362,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 setForceSetupWizard(false);
                 checkStatus();
               }}
-              className="w-full py-3.5 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white text-xs font-bold tracking-wide transition shadow-lg shadow-blue-600/25 active:scale-[0.98]"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] text-xs font-bold tracking-wide transition shadow-lg shadow-[#00F29D]/25 active:scale-[0.98]"
             >
               Complete Setup
             </button>
@@ -1329,9 +1387,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // Strictly fits within 100dvh (Zero unnecessary scrolling)
   // =========================================================================
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-4 pt-2.5 pb-4 max-w-sm mx-auto justify-between bg-[#121316] text-white select-none overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] px-4 pt-2.5 pb-4 max-w-sm mx-auto justify-between bg-[#070B14] text-white select-none overflow-hidden font-sans">
       
-      {/* 1. Header: Trackd Shield + Guarded / Needs fix Badge */}
+      {/* 1. Header: Official Trackd Logo + Guarded / Needs fix Badge */}
       <header className="flex items-center justify-between py-1 shrink-0">
         <div 
           onClick={() => {
@@ -1340,9 +1398,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           }}
           className="flex items-center gap-2 cursor-pointer active:opacity-80 transition"
         >
-          <span className="font-bold text-base tracking-tight text-white">
-            Trackd Shield
-          </span>
+          <TrackdLogo size="sm" subtitle="Sentinel Shield" />
         </div>
 
         {/* Badge on Right */}
@@ -1351,7 +1407,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           className="cursor-pointer active:scale-95 transition"
         >
           {isAllPermsActive ? (
-            <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-slate-300">
+            <span className="px-3 py-1 rounded-full bg-[#00F29D]/10 border border-[#00F29D]/30 text-xs font-semibold text-[#00F29D]">
               Guarded
             </span>
           ) : (
@@ -1376,18 +1432,20 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         <div className="relative flex items-center justify-center size-44">
           <span 
             className={`absolute inset-0 rounded-full animate-pulse motion-reduce:animate-none ${
-              isAllPermsActive ? 'bg-emerald-500/10' : 'bg-amber-500/10'
+              isAllPermsActive ? 'bg-[#00F29D]/15' : 'bg-amber-500/10'
             }`}
             style={{ animationDuration: '3s' }}
           />
           <span 
             className={`absolute inset-5 rounded-full ${
-              isAllPermsActive ? 'bg-emerald-500/20' : 'bg-amber-500/20'
+              isAllPermsActive ? 'bg-[#00F29D]/25' : 'bg-amber-500/20'
             }`}
           />
           <span 
-            className={`grid size-24 place-items-center rounded-full text-white shadow-xl ${
-              isAllPermsActive ? 'bg-emerald-500' : 'bg-amber-500'
+            className={`grid size-24 place-items-center rounded-full shadow-2xl transition ${
+              isAllPermsActive 
+                ? 'bg-gradient-to-br from-[#00F29D] to-[#00C888] text-[#070B14] shadow-[#00F29D]/30' 
+                : 'bg-amber-500 text-white'
             }`}
           >
             {isAllPermsActive ? (
@@ -1441,10 +1499,18 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             <span>{batteryLevel !== null ? `${batteryLevel}%` : '94%'}</span>
           </div>
 
-          <div className="px-3 py-1 rounded-full bg-[#1C1D21] border border-white/5 text-[11px] text-slate-200 font-medium flex items-center gap-1.5">
-            <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-            <span>{perms.sms ? 'SMS ready' : 'SMS off'}</span>
-          </div>
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              triggerHaptic('light');
+              setSmsCommandsOpen(true);
+            }}
+            className="px-3 py-1 rounded-full bg-[#1C1D21] hover:bg-[#25272D] border border-white/5 hover:border-[#00F29D]/30 text-[11px] text-slate-200 font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-[#00F29D]" />
+            <span>SMS commands</span>
+          </button>
         </div>
       </button>
 
@@ -1561,6 +1627,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       {/* Settings Editor Sheet */}
       {renderSettingsSheet()}
 
+      {/* SMS Emergency Commands Bottom Sheet */}
+      {renderSmsCommandsSheet()}
+
     </div>
   );
 
@@ -1641,6 +1710,146 @@ export default function MobileClientView({ user: _user }: Props = {}) {
               </li>
             ))}
           </ul>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // SHEET: SMS Emergency Commands Sheet (One-tap SMS trigger & copy)
+  // =========================================================================
+  function renderSmsCommandsSheet() {
+    if (!smsCommandsOpen) return null;
+
+    const activePin = pin || '1234';
+    const targetSim = emergencyPhone || '';
+
+    const handleSendSmsCommand = (cmd: string) => {
+      triggerHaptic('medium');
+      const smsBody = `${cmd}#${activePin}`;
+      if (targetSim) {
+        // Open native SMS composer directed to SIM/Emergency contact
+        window.open(`sms:${targetSim}?body=${encodeURIComponent(smsBody)}`, '_self');
+      } else {
+        // Open generic SMS composer with pre-filled body
+        window.open(`sms:?body=${encodeURIComponent(smsBody)}`, '_self');
+      }
+      setSmsActionState((prev) => ({ ...prev, [cmd]: 'sent' }));
+      setTimeout(() => {
+        setSmsActionState((prev) => ({ ...prev, [cmd]: 'idle' }));
+      }, 2500);
+    };
+
+    const handleCopySmsCommand = async (cmd: string) => {
+      triggerHaptic('light');
+      const smsBody = `${cmd}#${activePin}`;
+      try {
+        await navigator.clipboard.writeText(smsBody);
+        setSmsActionState((prev) => ({ ...prev, [cmd]: 'copied' }));
+        setTimeout(() => {
+          setSmsActionState((prev) => ({ ...prev, [cmd]: 'idle' }));
+        }, 2000);
+      } catch (err) {
+        console.error('Clipboard copy failed', err);
+      }
+    };
+
+    return (
+      <div 
+        onClick={() => setSmsCommandsOpen(false)}
+        className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end justify-center p-3 sm:pb-6 animate-in fade-in duration-200"
+      >
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm rounded-[28px] bg-[#0D1322] border border-[#00F29D]/20 p-5 pt-3 flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto"
+        >
+          {/* Drag Handle */}
+          <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mb-3" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#00F29D]/10 border border-[#00F29D]/30 flex items-center justify-center">
+                <Terminal className="w-4 h-4 text-[#00F29D]" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-white tracking-tight">
+                  SMS Emergency Commands
+                </h2>
+                <p className="text-[11px] text-slate-400">
+                  Tap to launch SMS with your secure PIN embedded
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setSmsCommandsOpen(false)}
+              className="p-1 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Quick Notice */}
+          <div className="my-3 p-3 rounded-2xl bg-[#070B14] border border-white/5 text-[11px] text-slate-300 leading-relaxed flex items-start gap-2.5">
+            <Smartphone className="w-4 h-4 text-[#00F29D] shrink-0 mt-0.5" />
+            <div>
+              Send these commands from <span className="text-white font-semibold">any phone</span> to locate, ring, or lock this device offline without internet.
+            </div>
+          </div>
+
+          {/* Command List */}
+          <ul className="space-y-2 mb-2">
+            {SMS_COMMANDS.map((entry) => {
+              const state = smsActionState[entry.command] || 'idle';
+              return (
+                <li 
+                  key={entry.command}
+                  className="rounded-2xl bg-[#141A29] border border-white/5 p-3.5 flex items-center justify-between gap-3 hover:border-[#00F29D]/30 transition"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-mono text-xs font-bold text-[#00F29D]">
+                        {entry.command}#
+                      </span>
+                      <span className="font-mono text-xs text-amber-400 tracking-widest font-semibold">
+                        ••••
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                      {entry.purpose}
+                    </p>
+                    {state === 'sent' && (
+                      <p className="text-[10px] text-[#00F29D] font-medium mt-1">SMS Composer opened ✓</p>
+                    )}
+                    {state === 'copied' && (
+                      <p className="text-[10px] text-[#00F29D] font-medium mt-1">Copied with PIN ✓</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleCopySmsCommand(entry.command)}
+                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition active:scale-95"
+                      title="Copy command"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSendSmsCommand(entry.command)}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold text-xs flex items-center gap-1 shadow-md shadow-[#00F29D]/20 active:scale-95 transition"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>Send</span>
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
         </div>
       </div>
     );
@@ -1828,7 +2037,24 @@ export default function MobileClientView({ user: _user }: Props = {}) {
                 <ChevronRight className="size-4 shrink-0 text-slate-500" />
               </li>
 
-              {/* Row 3: Test siren */}
+              {/* Row 3: SMS emergency commands */}
+              <li 
+                onClick={() => {
+                  triggerHaptic('light');
+                  setSettingsSheetOpen(false);
+                  setSmsCommandsOpen(true);
+                }}
+                className="flex items-center gap-3 px-4 min-h-14 active:bg-white/5 cursor-pointer transition"
+              >
+                <Terminal className="size-5 shrink-0 text-[#00F29D]" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] leading-tight text-white font-medium">Offline SMS commands</p>
+                  <p className="truncate text-[13px] leading-tight text-slate-400 mt-0.5">#LOCATE, #SIREN, #LOCK & more</p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-slate-500" />
+              </li>
+
+              {/* Row 4: Test siren */}
               <li 
                 onMouseDown={() => {
                   triggerHaptic('medium');

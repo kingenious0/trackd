@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   limit,
   onSnapshot,
   query,
@@ -66,11 +67,12 @@ export async function fetchProfile(userId: string): Promise<UserProfile | null> 
     phoneNumber: data.phoneNumber ?? "",
     emergencyContactPhone: data.emergencyContactPhone ?? "",
     masterPinHash: data.masterPinHash ?? "",
+    encryptedPin: data.encryptedPin,
     createdAt: data.createdAt ? toIso(data.createdAt) : new Date().toISOString()
   };
 }
 
-export async function saveProfile(userId: string, profile: UserProfile): Promise<void> {
+export async function saveProfile(userId: string, profile: Partial<UserProfile>): Promise<void> {
   if (isDemoMode()) return;
   await setDoc(doc(db(), USERS, userId), profile, { merge: true });
 }
@@ -106,6 +108,29 @@ export function subscribeDevices(
     },
     (error) => onError?.(error)
   );
+}
+
+export async function fetchDevices(userId: string): Promise<Device[]> {
+  if (isDemoMode()) return [];
+  const q = query(collection(db(), DEVICES), where("userId", "==", userId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((item) => {
+    const data = item.data() as Partial<Device>;
+    return {
+      id: item.id,
+      userId: data.userId ?? userId,
+      deviceName: data.deviceName ?? "Unnamed device",
+      deviceModel: data.deviceModel,
+      fcmToken: data.fcmToken,
+      registeredSimSerial: data.registeredSimSerial,
+      isStolen: Boolean(data.isStolen),
+      requestLocate: Boolean(data.requestLocate),
+      requestWipe: Boolean(data.requestWipe),
+      lastSeenAt: data.lastSeenAt ? toIso(data.lastSeenAt) : new Date(0).toISOString(),
+      lastTelemetry: data.lastTelemetry,
+      battery: typeof data.battery === "number" ? data.battery : undefined
+    } satisfies Device;
+  });
 }
 
 export function subscribeDevice(

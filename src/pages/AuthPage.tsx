@@ -6,7 +6,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { saveProfile, apiUrl } from "../lib/api";
-import { sha256Hex, toUnsignedE164 } from "../lib/crypto";
+import { sha256Hex, toUnsignedE164, encryptPin } from "../lib/crypto";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -161,12 +161,17 @@ export default function AuthPage({
         suPassword
       );
       if (fullName.trim()) await updateProfile(credential.user, { displayName: fullName.trim() });
+      const [pinHash, pinBlob] = await Promise.all([
+        sha256Hex(pin),
+        encryptPin(pin, credential.user.uid)
+      ]);
       await saveProfile(credential.user.uid, {
         fullName: fullName.trim(),
         email: suEmail.trim(),
         phoneNumber: toUnsignedE164(phone),
         emergencyContactPhone: toUnsignedE164(emergencyPhone),
-        masterPinHash: await sha256Hex(pin),
+        masterPinHash: pinHash,
+        encryptedPin: pinBlob,
         createdAt: new Date().toISOString()
       });
       setNotice("Account created — you are signed in.");
@@ -178,7 +183,7 @@ export default function AuthPage({
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-[#111215] text-[#EDEDED] font-sans antialiased selection:bg-blue-600 selection:text-white">
+    <div className="relative flex min-h-screen flex-col justify-between overflow-hidden bg-[#070B14] text-[#EDEDED] font-sans antialiased selection:bg-[#00F29D] selection:text-[#070B14]">
       {/* Top Navigation */}
       <Navbar
         currentTab="track"
@@ -194,22 +199,28 @@ export default function AuthPage({
         {/* Emergency Alert Banner */}
         <div className="w-full mb-5">
           <div className="rounded-2xl bg-[#1D160A] border border-[#B45309]/30 p-3.5 flex items-start gap-3 text-xs text-amber-200 shadow-sm">
-            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               <strong className="text-amber-400 font-semibold">Lost your phone right now?</strong> Log in below to see its location and lock it down.
             </p>
           </div>
         </div>
 
-        <div className="w-full rounded-2xl bg-[#17181C] border border-white/5 p-6 space-y-4 shadow-xl">
+        <div className="w-full rounded-3xl bg-[#0D1322] border border-white/10 p-6 space-y-4 shadow-2xl relative overflow-hidden ring-1 ring-white/5">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#00F29D]/10 rounded-full blur-3xl pointer-events-none" />
+
           <div className="text-center mb-1">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              {mode === "signin" ? "Log in to Trackd" : "Create account"}
+            <h1 className="text-2xl font-extrabold tracking-tight text-white">
+              {mode === "signin" ? (
+                <>Log in to Track<span className="text-[#00F29D]">d</span></>
+              ) : (
+                <>Arm your device with Track<span className="text-[#00F29D]">d</span></>
+              )}
             </h1>
-            <p className="mt-1 text-xs text-neutral-400">
+            <p className="mt-1 text-xs text-slate-400">
               {mode === "signin" 
-                ? "See your phone's location, battery and status from any browser."
-                : "Create an account to start protecting your phone."}
+                ? "See your phone's location, battery and telemetry from any browser."
+                : "Create an account to activate real-time anti-theft defense."}
             </p>
           </div>
 
@@ -220,7 +231,7 @@ export default function AuthPage({
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-1 rounded-full bg-[#1C1D21] p-1 border border-white/5">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#070B14] p-1 border border-white/10">
             {(["signin", "signup"] as Mode[]).map((item) => (
               <button
                 key={item}
@@ -231,8 +242,10 @@ export default function AuthPage({
                   setNotice(null);
                 }}
                 className={
-                  "rounded-full py-2 text-xs font-medium transition " +
-                  (mode === item ? "bg-[#2A2B32] text-white shadow-sm" : "text-neutral-400 hover:text-white")
+                  "rounded-lg py-2 text-xs font-semibold transition " +
+                  (mode === item 
+                    ? "bg-gradient-to-r from-[#00F29D] to-[#00DCA0] text-[#070B14] shadow-md shadow-[#00F29D]/20 font-bold" 
+                    : "text-slate-400 hover:text-white")
                 }
               >
                 {item === "signin" ? "Log in" : "Sign up"}
@@ -243,13 +256,13 @@ export default function AuthPage({
           {mode === "signin" ? (
             <form onSubmit={handleSignin} className="space-y-4">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-neutral-400">
+                <span className="mb-1.5 block text-xs font-medium text-slate-300">
                   Email
                 </span>
                 <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-neutral-500" />
+                  <Mail className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
                   <input
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder:text-neutral-500 focus:border-[#3B82F6] focus:outline-none transition"
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#070B14] border border-white/10 text-xs text-white placeholder:text-slate-500 focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30 focus:outline-none transition"
                     type="email"
                     required
                     value={email}
@@ -264,13 +277,13 @@ export default function AuthPage({
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-neutral-400">
+                <span className="mb-1.5 block text-xs font-medium text-slate-300">
                   Password
                 </span>
                 <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-neutral-500" />
+                  <Lock className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
                   <input
-                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#1C1D21] border border-white/5 text-xs text-white placeholder:text-neutral-500 focus:border-[#3B82F6] focus:outline-none transition"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-[#070B14] border border-white/10 text-xs text-white placeholder:text-slate-500 focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30 focus:outline-none transition"
                     type={showPassword ? "text" : "password"}
                     required
                     value={password}
@@ -284,7 +297,7 @@ export default function AuthPage({
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -294,22 +307,22 @@ export default function AuthPage({
 
               {error && <AuthAlert kind="err" text={error} />}
 
-              <button className="w-full py-3 px-4 rounded-xl bg-white text-black font-semibold text-xs md:text-sm flex items-center justify-center gap-2 hover:bg-neutral-200 active:scale-[0.98] transition shadow-md" type="submit" disabled={busy}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              <button className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold text-xs md:text-sm flex items-center justify-center gap-2 hover:brightness-105 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40" type="submit" disabled={busy}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin text-[#070B14]" /> : <ShieldCheck className="h-4 w-4 text-[#070B14]" />}
                 <span>Log in to track phone</span>
               </button>
 
               {/* First time prompt */}
               <div className="pt-3 border-t border-white/5 text-center space-y-1">
-                <p className="text-xs text-neutral-400">
+                <p className="text-xs text-slate-400">
                   First time here? You&apos;ll need the Trackd app on your phone before you can track it.
                 </p>
                 <button
                   type="button"
                   onClick={onSwitchToDownload}
-                  className="text-xs font-semibold text-[#38BDF8] hover:underline inline-flex items-center gap-1"
+                  className="text-xs font-semibold text-[#00F29D] hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Download the app</span>
+                  <span>Download Trackd Sentinel APK</span>
                   <span>&rarr;</span>
                 </button>
               </div>

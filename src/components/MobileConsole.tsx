@@ -346,7 +346,7 @@ export default function MobileConsole(props: Props) {
             {tab === "protect" && !demo && selectedDevice && <PermissionChecklist />}
 
             {tab === "commands" && selectedDevice && (
-              <CheatSheet deviceName={selectedDevice.deviceName} />
+              <CheatSheet deviceName={selectedDevice.deviceName} user={user} />
             )}
 
             {(tab === "protect" || tab === "commands") && !selectedDevice && (
