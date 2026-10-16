@@ -21,7 +21,7 @@ interface DownloadViewProps {
   onSwitchToLogin: () => void;
 }
 
-const SHA256_HASH = 'b0f478c70f194a48bc75d6a2f137e938fce4c7f3dcf0f606e28311d030d3bbd9';
+const SHA256_HASH = '1c9510b2ddaf63e410f3898f99227726c677334ab63d6b5cacc83613de5193fb';
 
 export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   const [copiedHash, setCopiedHash] = useState(false);
@@ -169,11 +169,11 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <a
               href="/downloads/trackd-latest.apk"
-              download="trackd-v1.2.1.apk"
+              download="trackd-v1.2.2.apk"
               className="py-3 px-6 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 active:scale-[0.98] transition text-[#070B14] font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-[#00F29D]/20 border border-[#00F29D]/40"
             >
               <Download className="w-4 h-4 text-[#070B14]" />
-              <span>Download Trackd APK (v1.2.1)</span>
+              <span>Download Trackd APK (v1.2.2)</span>
             </a>
             
             <button
@@ -427,7 +427,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Download Action Button */}
               <a
                 href="/downloads/trackd-latest.apk"
-                download="trackd-v1.2.1.apk"
+                download="trackd-v1.2.2.apk"
                 className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
               >
                 <Download className="w-4 h-4 text-[#070B14]" />
@@ -437,7 +437,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Version & Checksum Meta */}
               <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
                 <span className="font-mono text-[#00F29D] font-bold bg-[#00F29D]/10 px-2 py-0.5 rounded-full border border-[#00F29D]/25">
-                  v1.2.1 Latest
+                  v1.2.2 Latest
                 </span>
                 <span>•</span>
                 <span>Production Key</span>
@@ -461,11 +461,12 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
 
               {/* What's New Pill in Card */}
               <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
-                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.1</span>
+                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.2</span>
                 <ul className="text-slate-400 text-[11px] leading-snug space-y-0.5 list-disc list-inside">
-                  <li>Fixed STOLEN/SAFE decoy sync race condition across FCM & Firestore cache.</li>
-                  <li>Enhanced anti-shutdown power menu defense for Redmi MIUI & HyperOS.</li>
-                  <li>Auto-dismiss Assistant/Gemini bypass attempts while in theft mode.</li>
+                  <li>Direct background Firestore snapshot listener without auth gate blocking.</li>
+                  <li>Native TYPE_ACCESSIBILITY_OVERLAY decoy with synchronous view cleanup.</li>
+                  <li>Immediate background foreground check and ejection upon marking STOLEN.</li>
+                  <li>Automatic FCM token synchronization between Android bridge and Firestore.</li>
                 </ul>
               </div>
             </div>

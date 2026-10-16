@@ -26,6 +26,7 @@ export interface DeviceStatus {
   locationGranted?: boolean;
   smsGranted?: boolean;
   batteryOptimizationIgnored?: boolean;
+  fcmToken?: string;
 }
 
 export interface PermissionsOverview {
@@ -69,6 +70,7 @@ export interface TrackdBridgePlugin {
   stopHardwareSiren(): Promise<{ stopped: boolean }>;
   promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }>;
   pickContact(): Promise<{ phone: string; name?: string }>;
+  getFcmToken(): Promise<{ token: string }>;
 }
 
 export interface PermissionStatus {
@@ -177,6 +179,9 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   }
   async stopHardwareSiren(): Promise<{ stopped: boolean }> {
     return { stopped: true };
+  }
+  async getFcmToken(): Promise<{ token: string }> {
+    return { token: "" };
   }
   async promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }> {
     return { authenticated: true };

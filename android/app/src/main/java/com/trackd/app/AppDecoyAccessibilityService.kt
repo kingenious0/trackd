@@ -26,7 +26,8 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         serviceInfo = serviceInfo?.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                     AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+                    AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED or
+                    AccessibilityEvent.TYPE_WINDOWS_CHANGED
             feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                     AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -333,13 +334,16 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     private fun returnHome() {
         try {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+        } catch (_: Exception) {}
+        try {
             performGlobalAction(GLOBAL_ACTION_HOME)
         } catch (e: Exception) {
             Log.w(TAG, "performGlobalAction(GLOBAL_ACTION_HOME) failed", e)
         }
         val home = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         }
         try {
             startActivity(home)
@@ -350,11 +354,6 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     private fun showCrashOverlay(appName: String) {
         hideCrashOverlay()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            Log.w(TAG, "overlay permission missing; crash decoy skipped, forcing home navigation")
-            performGlobalAction(GLOBAL_ACTION_HOME)
-            return
-        }
 
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.dialog_fake_crash, null, false)
@@ -362,13 +361,24 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             getString(R.string.crash_message_template, appName)
         view.findViewById<Button>(R.id.crash_close).setOnClickListener {
             hideCrashOverlay()
+            returnHome()
+        }
+
+        // AccessibilityService has native privilege to display TYPE_ACCESSIBILITY_OVERLAY
+        // without requiring the user to grant "Display over other apps"
+        val windowType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
         }
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            windowType,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
             PixelFormat.TRANSLUCENT
@@ -381,19 +391,65 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         try {
             overlayWindow?.addView(view, params)
             overlayView = view
+            Log.i(TAG, "Crash overlay successfully displayed for $appName (type=$windowType)")
         } catch (error: Exception) {
-            Log.e(TAG, "overlay add failed", error)
+            Log.e(TAG, "overlay add failed with type $windowType, trying fallback", error)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    params.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                    overlayWindow?.addView(view, params)
+                    overlayView = view
+                    Log.i(TAG, "Crash overlay displayed via fallback TYPE_APPLICATION_OVERLAY")
+                } catch (fallbackError: Exception) {
+                    Log.e(TAG, "fallback overlay also failed", fallbackError)
+                    returnHome()
+                }
+            } else {
+                returnHome()
+            }
         }
     }
 
     private fun hideCrashOverlay() {
         val view = overlayView ?: return
         try {
-            overlayWindow?.removeView(view)
+            if (view.isAttachedToWindow) {
+                overlayWindow?.removeViewImmediate(view)
+            } else {
+                overlayWindow?.removeView(view)
+            }
         } catch (error: Exception) {
             Log.w(TAG, "overlay remove failed", error)
         }
         overlayView = null
+    }
+
+    fun checkAndInterceptForeground() {
+        try {
+            val root = rootInActiveWindow ?: return
+            val currentPkg = root.packageName?.toString() ?: return
+            if (currentPkg == packageName) return
+            var appName = FINTECH_PACKAGES[currentPkg]
+            if (appName == null) {
+                try {
+                    val appInfo = packageManager.getApplicationInfo(currentPkg, 0)
+                    val label = packageManager.getApplicationLabel(appInfo).toString()
+                    val lowerPkg = currentPkg.lowercase()
+                    val lowerLabel = label.lowercase()
+                    val financeKeywords = listOf("bank", "momo", "wallet", "ghanapay", "money", "fintech", "cash")
+                    if (financeKeywords.any { lowerPkg.contains(it) || lowerLabel.contains(it) }) {
+                        appName = if (label.isNotBlank()) label else "Banking App"
+                    }
+                } catch (_: Exception) {}
+            }
+            if (appName != null) {
+                Log.w(TAG, "Immediate interception of running fintech: $currentPkg ($appName)")
+                returnHome()
+                showCrashOverlay(appName)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "checkAndInterceptForeground error", e)
+        }
     }
 
     companion object {
@@ -401,7 +457,14 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         private var instance: AppDecoyAccessibilityService? = null
 
         fun onStolenStateChanged(stolen: Boolean) {
-            if (!stolen) {
+            Log.i(TAG, "onStolenStateChanged called: stolen=$stolen (instance=${instance != null})")
+            if (stolen) {
+                instance?.let { service ->
+                    service.dismissPowerMenu()
+                    service.returnHome()
+                    service.checkAndInterceptForeground()
+                }
+            } else {
                 instance?.hideCrashOverlay()
             }
         }

@@ -15,11 +15,12 @@ service cloud.firestore {
     }
 
     match /devices/{deviceId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow get: if true;
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
       allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if signedIn()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == resource.data.userId;
+      allow update: if (signedIn() && resource.data.userId == request.auth.uid)
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'lastSeenAt', 'lastTelemetry', 'battery', 'requestLocate', 'requestSiren', 'stopSiren', 'requestWipe']);
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
 
     match /telemetry_logs/{logId} {

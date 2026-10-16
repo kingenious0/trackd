@@ -201,20 +201,6 @@ object FirestoreSync {
         ensureFcmToken(context)
         syncDeviceState(context)
 
-        if (FirebaseAuth.getInstance().currentUser == null) {
-            Log.w(TAG, "not signed in yet; registering auth state listener to attach when ready")
-            FirebaseAuth.getInstance().addAuthStateListener { auth ->
-                if (auth.currentUser != null && registration == null) {
-                    val currentDevId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
-                    if (!currentDevId.isNullOrBlank()) {
-                        Log.i(TAG, "auth state restored; attaching command listener now")
-                        startCommandListener(context)
-                    }
-                }
-            }
-            return
-        }
-
         val db = try {
             FirebaseFirestore.getInstance()
         } catch (error: Throwable) {
@@ -320,7 +306,8 @@ object FirestoreSync {
             val isFromCache = snapshot.metadata.isFromCache
             val currentStolen = AegisState.isStolen(context)
             Log.i(TAG, "device snapshot: isStolen=$stolen (current=$currentStolen, isFromCache=$isFromCache)")
-            if (!isFromCache && currentStolen != stolen) {
+            if (currentStolen != stolen) {
+                Log.i(TAG, "Updating AegisState.isStolen from $currentStolen to $stolen")
                 AegisState.setStolen(context, stolen)
             }
         }

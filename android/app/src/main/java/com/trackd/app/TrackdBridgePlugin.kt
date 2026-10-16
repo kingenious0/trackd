@@ -328,6 +328,17 @@ class TrackdBridgePlugin : Plugin() {
         val hasPin = !AegisState.getString(context, AegisState.KEY_MASTER_PIN_HASH).isNullOrBlank()
         response.put("hasPinConfigured", hasPin)
 
+        val fcmToken = AegisState.getString(context, AegisPushService.KEY_FCM_TOKEN)
+        response.put("fcmToken", fcmToken ?: "")
+
+        call.resolve(response)
+    }
+
+    @PluginMethod
+    fun getFcmToken(call: PluginCall) {
+        val token = AegisState.getString(context, AegisPushService.KEY_FCM_TOKEN)
+        val response = JSObject()
+        response.put("token", token ?: "")
         call.resolve(response)
     }
 
@@ -335,10 +346,12 @@ class TrackdBridgePlugin : Plugin() {
     fun getLinkState(call: PluginCall) {
         val deviceId = AegisState.getString(context, AegisState.KEY_DEVICE_ID)
         val user = FirebaseAuth.getInstance().currentUser
+        val userId = AegisState.getString(context, AegisState.KEY_USER_ID)
+        val configured = !deviceId.isNullOrBlank() && (user != null || !userId.isNullOrBlank())
         val response = JSObject()
-        response.put("configured", !deviceId.isNullOrBlank() && user != null)
+        response.put("configured", configured)
         response.put("deviceId", deviceId ?: "")
-        response.put("uid", user?.uid ?: "")
+        response.put("uid", user?.uid ?: (userId ?: ""))
         response.put(
             "email",
             AegisState.getString(context, AegisState.KEY_USER_EMAIL) ?: (user?.email ?: "")

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { TrackdBridge, type LinkState } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
-import { createDevice, subscribeDevice, fetchProfile, fetchDevices } from '../lib/api';
+import { createDevice, updateDevice, subscribeDevice, fetchProfile, fetchDevices } from '../lib/api';
 import { SMS_COMMANDS } from '../lib/types';
 import TrackdLogo from './TrackdLogo';
 
@@ -244,6 +244,9 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           localStorage.setItem('trackd_onboarding_complete', 'true');
           setOnboardingComplete(true);
         }
+        if (linkRes.deviceId && deviceStatus?.fcmToken) {
+          updateDevice(linkRes.deviceId, { fcmToken: deviceStatus.fcmToken }).catch(() => undefined);
+        }
       }
     } catch (e) {
       console.error('Status check failed:', e);
@@ -306,9 +309,10 @@ export default function MobileClientView({ user: _user }: Props = {}) {
 
   // Real-time Firestore subscription to detect when marked stolen from the web console
   useEffect(() => {
-    if (!linkState.configured || !linkState.deviceId) return;
+    const targetDevId = linkState.deviceId || localStorage.getItem('trackd_device_id');
+    if (!targetDevId) return;
     const unsub = subscribeDevice(
-      linkState.deviceId,
+      targetDevId,
       (device) => {
         if (!device) return;
         const stolen = Boolean(device.isStolen);
