@@ -21,7 +21,7 @@ interface DownloadViewProps {
   onSwitchToLogin: () => void;
 }
 
-const SHA256_HASH = '5a28f67b7c8d9d98b51567ba25205adbd54674b0b263499527ca88255f5f846b';
+const SHA256_HASH = '32e2657b4369a06cc69ec3977d47efa82e996567210d4a3e97bf97e68768b0c8';
 
 export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   const [copiedHash, setCopiedHash] = useState(false);
@@ -169,11 +169,11 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <a
               href="/downloads/trackd-latest.apk"
-              download="trackd-v1.2.5.apk"
+              download="trackd-v1.2.6.apk"
               className="py-3 px-6 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 active:scale-[0.98] transition text-[#070B14] font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-[#00F29D]/20 border border-[#00F29D]/40"
             >
               <Download className="w-4 h-4 text-[#070B14]" />
-              <span>Download Trackd APK (v1.2.5)</span>
+              <span>Download Trackd APK (v1.2.6)</span>
             </a>
             
             <button
@@ -427,7 +427,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Download Action Button */}
               <a
                 href="/downloads/trackd-latest.apk"
-                download="trackd-v1.2.5.apk"
+                download="trackd-v1.2.6.apk"
                 className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
               >
                 <Download className="w-4 h-4 text-[#070B14]" />
@@ -437,7 +437,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Version & Checksum Meta */}
               <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
                 <span className="font-mono text-[#00F29D] font-bold bg-[#00F29D]/10 px-2 py-0.5 rounded-full border border-[#00F29D]/25">
-                  v1.2.5 Latest
+                  v1.2.6 Latest
                 </span>
                 <span>•</span>
                 <span>Production Key</span>
@@ -461,13 +461,13 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
 
               {/* What's New Pill in Card */}
               <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
-                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.5</span>
+                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.6</span>
                 <ul className="text-slate-400 text-[11px] leading-snug space-y-0.5 list-disc list-inside">
+                  <li>Play Protect Optimization: Cleaned up redundant permissions &amp; adopted policy-compliant launcher visibility.</li>
+                  <li>Zero-Day Fintech Shield: Preserved dynamic detection for Ghana MoMo &amp; banking apps.</li>
                   <li>Fixed decoy touch passthrough on Samsung One UI &amp; modern Android.</li>
                   <li>Added 8-second re-trigger cooldown and 15s auto-dismiss safety watchdog.</li>
                   <li>OEM Autostart &amp; Task Killer Protection (Transsion, Xiaomi, Oppo, Vivo).</li>
-                  <li>Full Web &amp; SMS Remote Commands (Siren, Silence, Locate, Stolen, Safe, Wipe).</li>
-                  <li>Instant Stolen lockdown: blocks Ghana mobile money (*170#, *110#), fintech apps, and power off menu.</li>
                 </ul>
               </div>
             </div>
