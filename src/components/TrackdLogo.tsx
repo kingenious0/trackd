@@ -2,6 +2,7 @@
 interface TrackdLogoProps {
   size?: "sm" | "md" | "lg" | "xl";
   showWordmark?: boolean;
+  showBeta?: boolean;
   subtitle?: string;
   className?: string;
 }
@@ -9,6 +10,7 @@ interface TrackdLogoProps {
 export default function TrackdLogo({
   size = "md",
   showWordmark = true,
+  showBeta = false,
   subtitle,
   className = "",
 }: TrackdLogoProps) {
@@ -43,8 +45,15 @@ export default function TrackdLogo({
       {/* Official Brand Wordmark */}
       {showWordmark && (
         <div className="flex flex-col leading-none">
-          <div className={`font-black tracking-tight text-white ${textSizes[size]}`}>
-            Track<span className="text-[#00F29D]">d</span>
+          <div className="flex items-center gap-1.5">
+            <span className={`font-black tracking-tight text-white ${textSizes[size]}`}>
+              Track<span className="text-[#00F29D]">d</span>
+            </span>
+            {showBeta && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-[#00F29D]/10 text-[#00F29D] border border-[#00F29D]/30 shadow-sm shadow-[#00F29D]/10">
+                Beta
+              </span>
+            )}
           </div>
           {subtitle && (
             <span className="text-[9px] font-mono tracking-widest text-[#00F29D]/80 uppercase mt-0.5">

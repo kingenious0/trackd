@@ -27,7 +27,7 @@ export default function Navbar({
           className="flex items-center group text-left focus:outline-none"
           title="Trackd Anti-Theft Security"
         >
-          <TrackdLogo size="md" />
+          <TrackdLogo size="md" showBeta={true} />
         </button>
 
         {/* Right Nav Row: Vertically Centered, No Wrap */}
