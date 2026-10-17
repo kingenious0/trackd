@@ -19,14 +19,19 @@ class AegisPushService : FirebaseMessagingService() {
             "STOLEN" -> {
                 AegisState.setStolen(this, true)
                 FirestoreSync.pushStolen(this, true)
+                AppDecoyAccessibilityService.onStolenStateChanged(true)
             }
             "SAFE" -> {
                 AegisState.setStolen(this, false)
                 FirestoreSync.pushStolen(this, false)
+                AppDecoyAccessibilityService.onStolenStateChanged(false)
             }
             "LOCATE" -> TelemetryDispatcher.sendNow(this, "FCM_WAKE")
-            "SIREN" -> HardwareAlarm.play(this, 30000L)
-            "STOP_SIREN" -> HardwareAlarm.stop()
+            "SIREN" -> {
+                TrackdSentinelService.start(this)
+                HardwareAlarm.play(this, 30000L)
+            }
+            "STOP_SIREN", "SILENCE" -> HardwareAlarm.stop()
             "WIPE" -> AntiTheftAdminReceiver.executeWipe(this)
             else -> {
                 FirestoreSync.syncDeviceState(this)

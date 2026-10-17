@@ -322,7 +322,7 @@ export default function AuthPage({
                   onClick={onSwitchToDownload}
                   className="text-xs font-semibold text-[#00F29D] hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Download Trackd Sentinel APK</span>
+                  <span>Download Trackd App (APK)</span>
                   <span>&rarr;</span>
                 </button>
               </div>

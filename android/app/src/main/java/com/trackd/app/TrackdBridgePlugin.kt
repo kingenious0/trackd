@@ -584,6 +584,97 @@ class TrackdBridgePlugin : Plugin() {
         call.reject("Contact selection cancelled")
     }
 
+    @PluginMethod
+    fun getDeviceInfo(call: PluginCall) {
+        val manufacturer = Build.MANUFACTURER ?: ""
+        val brand = Build.BRAND ?: ""
+        val model = Build.MODEL ?: ""
+        val release = Build.VERSION.RELEASE ?: ""
+        val sdk = Build.VERSION.SDK_INT
+
+        val isTranssion = listOf("tecno", "infinix", "itel", "transsion").any {
+            manufacturer.contains(it, ignoreCase = true) || brand.contains(it, ignoreCase = true)
+        }
+        val isXiaomi = listOf("xiaomi", "redmi", "poco").any {
+            manufacturer.contains(it, ignoreCase = true) || brand.contains(it, ignoreCase = true)
+        }
+        val isSamsung = manufacturer.contains("samsung", ignoreCase = true)
+        val isOppo = listOf("oppo", "realme", "oneplus").any {
+            manufacturer.contains(it, ignoreCase = true) || brand.contains(it, ignoreCase = true)
+        }
+        val isVivo = listOf("vivo", "iqoo").any {
+            manufacturer.contains(it, ignoreCase = true) || brand.contains(it, ignoreCase = true)
+        }
+
+        val res = JSObject().apply {
+            put("manufacturer", manufacturer)
+            put("brand", brand)
+            put("model", model)
+            put("androidVersion", release)
+            put("sdkInt", sdk)
+            put("isTranssion", isTranssion)
+            put("isXiaomi", isXiaomi)
+            put("isSamsung", isSamsung)
+            put("isOppo", isOppo)
+            put("isVivo", isVivo)
+        }
+        call.resolve(res)
+    }
+
+    @PluginMethod
+    fun openAutostartSettings(call: PluginCall) {
+        val candidateIntents = mutableListOf<Intent>()
+        val pkg = context.packageName
+
+        // 1. Transsion (Tecno, Infinix, itel)
+        candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemanager", "com.itel.autobootmanager.ui.AutoBootMgrActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemanager", "com.transsion.phonemanager.home.MainActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.itel.autobootmanager", "com.itel.autobootmanager.ui.AutoBootMgrActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.security.autostart", "com.transsion.security.autostart.MainActivity")))
+        candidateIntents.add(Intent("com.transsion.phonemanager.AUTOSTART"))
+
+        // 2. Xiaomi / MIUI / HyperOS
+        candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")))
+        candidateIntents.add(Intent("miui.intent.action.OP_AUTO_START").addCategory(Intent.CATEGORY_DEFAULT))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.powercenter.PowerSettings")))
+
+        // 3. Oppo / Realme / OnePlus
+        candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity")))
+
+        // 4. Vivo / iQOO
+        candidateIntents.add(Intent().setComponent(ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")))
+
+        // 5. Samsung Device Care
+        candidateIntents.add(Intent().setComponent(ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")))
+        candidateIntents.add(Intent().setComponent(ComponentName("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity")))
+
+        // 6. Generic App Details / Battery Optimization Fallback
+        val detailsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", pkg, null)
+        }
+        candidateIntents.add(detailsIntent)
+
+        for (intent in candidateIntents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                val res = JSObject().apply {
+                    put("success", true)
+                    put("component", intent.component?.flattenToString() ?: intent.action ?: "generic")
+                }
+                call.resolve(res)
+                return
+            } catch (_: Exception) {
+                // Continue trying fallbacks
+            }
+        }
+
+        call.reject("Could not open autostart or app settings")
+    }
+
     private fun startActivity(call: PluginCall, intent: Intent) {
         try {
             activity.startActivity(intent)

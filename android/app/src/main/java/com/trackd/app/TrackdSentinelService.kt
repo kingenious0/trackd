@@ -133,10 +133,10 @@ class TrackdSentinelService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
-                "Trackd Security Shield",
+                "Trackd Protection",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps Trackd active in the background for remote locator commands"
+                description = "Maintains active anti-theft protection and remote commands"
                 setShowBadge(false)
             }
             notificationManager.createNotificationChannel(channel)
@@ -151,8 +151,8 @@ class TrackdSentinelService : Service() {
         )
 
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Trackd Shield Active")
-            .setContentText("Continuous anti-theft and remote command sync running")
+            .setContentTitle("Trackd Active")
+            .setContentText("Protection active in background")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -173,6 +173,9 @@ class TrackdSentinelService : Service() {
                 var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 if ((hasFine || hasCoarse) && hasBgLocation) {
                     serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    Log.i(TAG, "FGS starting as LOCATION + DATA_SYNC")
+                } else {
+                    Log.i(TAG, "FGS starting as DATA_SYNC only (bg location not granted or in background)")
                 }
 
                 try {
@@ -181,6 +184,7 @@ class TrackdSentinelService : Service() {
                     Log.w(TAG, "Location/combined FGS rejected, falling back to DATA_SYNC only", se)
                     try {
                         startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                        Log.i(TAG, "FGS started as DATA_SYNC fallback")
                     } catch (inner: Throwable) {
                         Log.e(TAG, "Failed to start FGS with DATA_SYNC fallback", inner)
                     }
@@ -190,11 +194,14 @@ class TrackdSentinelService : Service() {
                 val hasCoarse = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 val serviceType = if (hasFine || hasCoarse) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
                 if (serviceType != 0) {
+                    Log.i(TAG, "FGS starting as LOCATION (API 29-33)")
                     startForeground(NOTIFICATION_ID, notification, serviceType)
                 } else {
+                    Log.i(TAG, "FGS starting as standard FGS (API 29-33)")
                     startForeground(NOTIFICATION_ID, notification)
                 }
             } else {
+                Log.i(TAG, "FGS starting as standard legacy FGS (< API 29)")
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (e: SecurityException) {

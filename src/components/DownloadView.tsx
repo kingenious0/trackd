@@ -21,13 +21,13 @@ interface DownloadViewProps {
   onSwitchToLogin: () => void;
 }
 
-const SHA256_HASH = 'c7d1b68ea252bffc70846c6a0872cf69a33474130ce7e64be9ebdf26cd1e1c61';
+const SHA256_HASH = 'f8032a16571a2e79b2960af2e26299eecc14ed57e280ea81e824cdf948c872a7';
 
 export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   const [copiedHash, setCopiedHash] = useState(false);
   const [activeCommand, setActiveCommand] = useState<string | null>(null);
   const [simulatedLogs, setSimulatedLogs] = useState<string[]>([
-    'SYSTEM READY • STANDALONE SENTINEL IDLE',
+    'SYSTEM READY • DEVICE PROTECTION ACTIVE',
     'LISTENING FOR ENCRYPTED SMS HANDSHAKE OVER GSM (2G/3G/4G/5G)',
   ]);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -169,11 +169,11 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <a
               href="/downloads/trackd-latest.apk"
-              download="trackd-v1.2.3.apk"
+              download="trackd-v1.2.4.apk"
               className="py-3 px-6 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 active:scale-[0.98] transition text-[#070B14] font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-[#00F29D]/20 border border-[#00F29D]/40"
             >
               <Download className="w-4 h-4 text-[#070B14]" />
-              <span>Download Trackd APK (v1.2.3)</span>
+              <span>Download Trackd APK (v1.2.4)</span>
             </a>
             
             <button
@@ -355,7 +355,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#00F29D]/10 border border-[#00F29D]/30 text-[11px] font-semibold text-[#00F29D] mb-3">
                 <Smartphone className="w-3.5 h-3.5" />
-                <span>Trackd Sentinel • Android Defense</span>
+                <span>Trackd • Mobile Device Protection</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
                 Arm your phone in 2 easy steps
@@ -427,7 +427,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Download Action Button */}
               <a
                 href="/downloads/trackd-latest.apk"
-                download="trackd-v1.2.3.apk"
+                download="trackd-v1.2.4.apk"
                 className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
               >
                 <Download className="w-4 h-4 text-[#070B14]" />
@@ -437,7 +437,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               {/* Version & Checksum Meta */}
               <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
                 <span className="font-mono text-[#00F29D] font-bold bg-[#00F29D]/10 px-2 py-0.5 rounded-full border border-[#00F29D]/25">
-                  v1.2.3 Latest
+                  v1.2.4 Latest
                 </span>
                 <span>•</span>
                 <span>Production Key</span>
@@ -461,13 +461,13 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
 
               {/* What's New Pill in Card */}
               <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
-                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.3</span>
+                <span className="text-[10px] uppercase tracking-wider text-[#00F29D] font-bold block">What&apos;s New in v1.2.4</span>
                 <ul className="text-slate-400 text-[11px] leading-snug space-y-0.5 list-disc list-inside">
-                  <li>Android 14+ (API 34) Foreground Service compliance (dataSync baseline with dynamic location fallback).</li>
-                  <li>Eliminated SecurityException crash on fresh install or background service restart.</li>
-                  <li>Direct background Firestore snapshot listener without auth gate blocking.</li>
-                  <li>Native TYPE_ACCESSIBILITY_OVERLAY decoy with synchronous view cleanup.</li>
-                  <li>Automatic FCM token synchronization between Android bridge and Firestore.</li>
+                  <li>OEM Autostart &amp; Task Killer Protection (Transsion Tecno/Infinix, Xiaomi/HyperOS, Oppo, Vivo).</li>
+                  <li>Full Web &amp; SMS Remote Commands (Siren, Silence, Locate, Stolen, Safe, Wipe).</li>
+                  <li>Instant Stolen lockdown: blocks Ghana mobile money (*170#, *110#), fintech apps, and power off menu.</li>
+                  <li>Asynchronous goAsync SMS GPS telemetry with 15s failsafe and flexible command syntax.</li>
+                  <li>One-tap &ldquo;Verify protection&rdquo; live handset self-test.</li>
                 </ul>
               </div>
             </div>
@@ -491,7 +491,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
                 <tr>
                   <th className="py-3.5 px-4 sm:px-6">Security Feature / Capability</th>
                   <th className="py-3.5 px-4 sm:px-6 text-slate-300">Google Find Hub</th>
-                  <th className="py-3.5 px-4 sm:px-6 text-[#00F29D] font-bold bg-[#00F29D]/5">Trackd Sentinel</th>
+                  <th className="py-3.5 px-4 sm:px-6 text-[#00F29D] font-bold bg-[#00F29D]/5">Trackd Protection</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-slate-300">
@@ -583,7 +583,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               Autonomous Defense Capabilities
             </h3>
-            <span className="text-[11px] text-[#00F29D] font-medium">Native Android Sentinel</span>
+            <span className="text-[11px] text-[#00F29D] font-medium">Native Android App</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -661,7 +661,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
 
       {/* Clean Security Footer */}
       <footer className="w-full py-8 text-center text-xs text-slate-400 border-t border-white/5 px-4 space-y-1.5">
-        <p className="text-slate-300 font-medium">Trackd Sentinel • Autonomous Offline Defense for Android</p>
+        <p className="text-slate-300 font-medium">Trackd • Autonomous Offline Device Protection for Android</p>
         <p className="text-[11px] text-slate-400">Setup requires physical access to your phone and a 6-digit emergency PIN only you control.</p>
       </footer>
     </div>

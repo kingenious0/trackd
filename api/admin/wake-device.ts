@@ -3,7 +3,7 @@ import { getMessaging } from "firebase-admin/messaging";
 import { adminApp, adminDb } from "../_lib/admin.js";
 import { handleCors } from "../_lib/cors.js";
 
-const ACTIONS = new Set(["LOCATE", "STOLEN", "SAFE", "WIPE"]);
+const ACTIONS = new Set(["LOCATE", "STOLEN", "SAFE", "WIPE", "SIREN", "STOP_SIREN", "SILENCE"]);
 
 /**
  * POST /api/admin/wake-device  { deviceId, action }
@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, error: "deviceId is required" });
   }
   if (typeof action !== "string" || !ACTIONS.has(action)) {
-    return res.status(400).json({ success: false, error: "action must be LOCATE | STOLEN | SAFE | WIPE" });
+    return res.status(400).json({ success: false, error: "action must be LOCATE | STOLEN | SAFE | WIPE | SIREN | STOP_SIREN" });
   }
 
   try {

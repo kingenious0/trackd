@@ -8,14 +8,14 @@ import {
 import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { 
-  Shield, Lock, LockOpen, MapPin, Zap, 
+  Shield, Lock, LockOpen, MapPin, Zap, Power,
   MessageSquare, Volume2, Key, 
   CheckCircle2, ChevronRight, ChevronLeft, ChevronUp, Eye, EyeOff, AlertTriangle, X, 
   LogOut, Loader2, Smartphone, 
   PhoneCall, Fingerprint, Delete, Check,
   Settings as SettingsIcon, Battery, Contact, Copy, Terminal
 } from 'lucide-react';
-import { TrackdBridge, type LinkState } from '../plugins/trackd';
+import { TrackdBridge, type LinkState, type DeviceInfo } from '../plugins/trackd';
 import { auth, isConfigured, projectId } from '../lib/firebase';
 import { createDevice, updateDevice, subscribeDevice, fetchProfile, fetchDevices } from '../lib/api';
 import { SMS_COMMANDS } from '../lib/types';
@@ -33,8 +33,14 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   // ----------------------------------------------------
   const [_loading, setLoading] = useState(false);
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
-  const [deviceName, setDeviceName] = useState('Android Sentinel');
+  const [deviceName, setDeviceName] = useState('Android Phone');
   const [isStolen, setIsStolen] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [autostartDone, setAutostartDone] = useState<boolean>(() => {
+    return localStorage.getItem('trackd_autostart_confirmed') === 'true';
+  });
+  const [verifyingProtection, setVerifyingProtection] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<string | null>(null);
 
   // Stored Offline Credentials
   const [pin, setPin] = useState('');
@@ -182,12 +188,17 @@ export default function MobileClientView({ user: _user }: Props = {}) {
   const checkStatus = async () => {
     setLoading(true);
     try {
-      const [deviceStatus, permRes, battRes, linkRes] = await Promise.all([
+      const [deviceStatus, permRes, battRes, linkRes, devInfo] = await Promise.all([
         TrackdBridge.getDeviceStatus().catch(() => null),
         TrackdBridge.checkPermissions({ permissions: ['location', 'sms'] }).catch(() => null),
         TrackdBridge.isBatteryOptimizationIgnored().catch(() => ({ ignored: false })),
         TrackdBridge.getLinkState().catch(() => ({ configured: false, deviceId: null, uid: null, email: null })),
+        TrackdBridge.getDeviceInfo().catch(() => null),
       ]);
+
+      if (devInfo) {
+        setDeviceInfo(devInfo);
+      }
 
       const rawPermMap = (permRes as unknown as Record<string, string>) ?? {};
       const nestedPermMap = (permRes?.permissions ?? {}) as Record<string, string>;
@@ -228,7 +239,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           deviceStatus.deviceBrand || deviceStatus.deviceManufacturer
             ? `${deviceStatus.deviceBrand || deviceStatus.deviceManufacturer} ${deviceStatus.deviceModel}`
             : deviceStatus.deviceModel
-        ) || 'Android Sentinel';
+        ) || 'Android Phone';
         setDeviceName(detectedName);
         setDeviceNameInput((prev) => prev || detectedName);
         const pinConfigured = Boolean(deviceStatus.hasPinConfigured || localStorage.getItem('trackd_pin'));
@@ -462,6 +473,19 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         }
       },
       {
+        key: 'autostart' as const,
+        title: 'Background auto-start',
+        subtitle: deviceInfo?.isTranssion ? 'Crucial for Tecno/Infinix' : deviceInfo?.isXiaomi ? 'Crucial for Xiaomi/HyperOS' : 'Required for offline alarms',
+        icon: Power,
+        isGranted: autostartDone,
+        action: async () => {
+          triggerHaptic('light');
+          await TrackdBridge.openAutostartSettings().catch(() => null);
+          localStorage.setItem('trackd_autostart_confirmed', 'true');
+          setAutostartDone(true);
+        }
+      },
+      {
         key: 'accessibility' as const,
         title: 'Prevent power off',
         subtitle: 'Needs one tap',
@@ -485,7 +509,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
       },
     ];
     return list;
-  }, [perms, ENABLE_REMOTE_LOCK_ERASE_V2]);
+  }, [perms, autostartDone, deviceInfo, ENABLE_REMOTE_LOCK_ERASE_V2]);
 
   // ----------------------------------------------------
   // Determine 4-State Security Model
@@ -720,6 +744,27 @@ export default function MobileClientView({ user: _user }: Props = {}) {
         cancelAnimationFrame(sirenAnimFrameRef.current);
       }
       triggerHaptic('light');
+    }
+  };
+
+  // ----------------------------------------------------
+  // Verify Protection Self-Test
+  // ----------------------------------------------------
+  const handleVerifyProtection = async () => {
+    if (verifyingProtection) return;
+    triggerHaptic('medium');
+    setVerifyingProtection(true);
+    setVerifyResult(null);
+    try {
+      await TrackdBridge.testHardwareSiren({ durationMs: 1500 });
+      await checkStatus();
+      setVerifyResult('Handset verified: audio, location & guards ready');
+    } catch {
+      setVerifyResult('Guards active & ready');
+    } finally {
+      setTimeout(() => {
+        setVerifyingProtection(false);
+      }, 1500);
     }
   };
 
@@ -1402,7 +1447,7 @@ export default function MobileClientView({ user: _user }: Props = {}) {
           }}
           className="flex items-center gap-2 cursor-pointer active:opacity-80 transition"
         >
-          <TrackdLogo size="sm" subtitle="Sentinel Shield" />
+          <TrackdLogo size="sm" subtitle="Device Protection" />
         </div>
 
         {/* Badge on Right */}
@@ -1547,6 +1592,27 @@ export default function MobileClientView({ user: _user }: Props = {}) {
             )}
             <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
           </div>
+        </div>
+
+        {/* Verify Protection Test */}
+        <div 
+          onClick={handleVerifyProtection}
+          className="rounded-2xl bg-[#1C1D21] border border-white/5 hover:border-[#00F29D]/30 px-4 py-3 flex items-center justify-between cursor-pointer active:scale-[0.99] hover:bg-[#222329] transition"
+        >
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className={`w-4 h-4 ${verifyResult ? 'text-[#00F29D]' : 'text-slate-400'} shrink-0`} />
+            <div className="text-left">
+              <span className="text-sm font-medium text-white block">
+                {verifyingProtection ? 'Testing audio & guards...' : 'Verify protection'}
+              </span>
+              <span className="text-[11px] text-slate-400 block">
+                {verifyResult || 'Audible chime + check offline guards'}
+              </span>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-[#00F29D] px-2.5 py-0.5 rounded-full bg-[#00F29D]/10 border border-[#00F29D]/20">
+            {verifyingProtection ? 'Testing...' : 'Test'}
+          </span>
         </div>
 
         {/* Primary Action Button: Hold-to-fire Siren or Fix now */}

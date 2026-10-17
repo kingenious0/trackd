@@ -309,6 +309,7 @@ object FirestoreSync {
             if (currentStolen != stolen) {
                 Log.i(TAG, "Updating AegisState.isStolen from $currentStolen to $stolen")
                 AegisState.setStolen(context, stolen)
+                AppDecoyAccessibilityService.onStolenStateChanged(stolen)
             }
         }
 

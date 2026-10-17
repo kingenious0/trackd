@@ -140,7 +140,7 @@ export default function App() {
                 showApk ? "bg-emerald-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
               }`}
             >
-              APK Sentinel
+              Mobile App
             </button>
           </div>
         )}
@@ -227,7 +227,7 @@ export default function App() {
               showApk ? "bg-emerald-600 text-white font-bold shadow-sm" : "text-slate-400 hover:text-white"
             }`}
           >
-            APK Sentinel
+            Mobile App
           </button>
         </div>
       )}

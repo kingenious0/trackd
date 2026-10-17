@@ -71,6 +71,21 @@ export interface TrackdBridgePlugin {
   promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }>;
   pickContact(): Promise<{ phone: string; name?: string }>;
   getFcmToken(): Promise<{ token: string }>;
+  getDeviceInfo(): Promise<DeviceInfo>;
+  openAutostartSettings(): Promise<{ success: boolean; component: string }>;
+}
+
+export interface DeviceInfo {
+  manufacturer: string;
+  brand: string;
+  model: string;
+  androidVersion: string;
+  sdkInt: number;
+  isTranssion: boolean;
+  isXiaomi: boolean;
+  isSamsung: boolean;
+  isOppo: boolean;
+  isVivo: boolean;
 }
 
 export interface PermissionStatus {
@@ -185,6 +200,24 @@ export class WebTrackdBridge extends WebPlugin implements TrackdBridgePlugin {
   }
   async promptBiometric(): Promise<{ authenticated: boolean; available?: boolean; error?: string }> {
     return { authenticated: true };
+  }
+  async getDeviceInfo(): Promise<DeviceInfo> {
+    return {
+      manufacturer: "Generic",
+      brand: "Web",
+      model: "Browser",
+      androidVersion: "14",
+      sdkInt: 34,
+      isTranssion: false,
+      isXiaomi: false,
+      isSamsung: false,
+      isOppo: false,
+      isVivo: false
+    };
+  }
+  async openAutostartSettings(): Promise<{ success: boolean; component: string }> {
+    console.warn("Autostart settings only available on Android native");
+    return { success: false, component: "web" };
   }
 }
 

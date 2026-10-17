@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
@@ -14,6 +16,7 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SmsCommandReceiver : BroadcastReceiver() {
 
@@ -37,11 +40,29 @@ class SmsCommandReceiver : BroadcastReceiver() {
             return
         }
 
+        val pendingResult = goAsync()
+        val finished = AtomicBoolean(false)
+        val safeFinish = {
+            if (finished.compareAndSet(false, true)) {
+                try {
+                    pendingResult.finish()
+                } catch (e: Exception) {
+                    Log.w(TAG, "pendingResult.finish failed", e)
+                }
+            }
+        }
+
+        // Failsafe timeout to prevent hung receiver
+        Handler(Looper.getMainLooper()).postDelayed({
+            safeFinish()
+        }, 15000L)
+
         val now = System.currentTimeMillis()
         val lockoutUntil = AegisState.getLong(context, AegisState.KEY_SMS_LOCKOUT_UNTIL, 0L)
         if (now < lockoutUntil) {
             val remainingSec = (lockoutUntil - now) / 1000
             Log.w(TAG, "SMS commands locked out due to excessive failed PIN attempts. Cooldown: ${remainingSec}s remaining. Silently dropping.")
+            safeFinish()
             return
         }
 
@@ -58,6 +79,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
             } else {
                 AegisState.putInt(context, AegisState.KEY_FAILED_SMS_ATTEMPTS, failed)
             }
+            safeFinish()
             return
         }
 
@@ -66,40 +88,53 @@ class SmsCommandReceiver : BroadcastReceiver() {
         AegisState.putLong(context, AegisState.KEY_SMS_LOCKOUT_UNTIL, 0L)
         Log.i(TAG, "PIN verified! Executing command: '${command.first}'")
 
+        try {
+            abortBroadcast()
+            Log.i(TAG, "Broadcast aborted for secondary SMS handlers.")
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not abort broadcast: ${e.message}")
+        }
+
         when (command.first) {
-            "LOCATE" -> handleLocate(context, sender)
+            "LOCATE" -> {
+                handleLocate(context, sender, safeFinish)
+            }
             "SIREN" -> {
+                TrackdSentinelService.start(context)
                 HardwareAlarm.play(context, 30000L)
                 reply(context, sender, "Trackd: High-decibel emergency siren activated.")
+                safeFinish()
             }
             "STOP_SIREN", "SILENCE" -> {
                 HardwareAlarm.stop()
                 reply(context, sender, "Trackd: Emergency siren silenced.")
+                safeFinish()
             }
             "STOLEN" -> {
                 AegisState.setStolen(context, true)
                 FirestoreSync.pushStolen(context, true)
+                AppDecoyAccessibilityService.onStolenStateChanged(true)
                 reply(context, sender, "Trackd: Device marked STOLEN. Financial decoys armed.")
+                safeFinish()
             }
             "SAFE" -> {
                 AegisState.setStolen(context, false)
                 FirestoreSync.pushStolen(context, false)
+                AppDecoyAccessibilityService.onStolenStateChanged(false)
                 reply(context, sender, "Trackd: Device marked SAFE. Decoys disarmed.")
+                safeFinish()
             }
             "WIPE" -> {
                 reply(context, sender, "Trackd: Remote Factory Wipe held for V2.")
+                safeFinish()
             }
-        }
-
-        try {
-            abortBroadcast()
-            Log.i(TAG, "Broadcast successfully aborted to conceal security command from unauthorized notification.")
-        } catch (e: Exception) {
-            Log.w(TAG, "Could not abort broadcast: ${e.message}")
+            else -> {
+                safeFinish()
+            }
         }
     }
 
-    private fun handleLocate(context: Context, sender: String?) {
+    private fun handleLocate(context: Context, sender: String?, onComplete: () -> Unit) {
         Log.i(TAG, "Processing LOCATE request for sender: $sender")
         val client = LocationServices.getFusedLocationProviderClient(context)
         val fineGranted = ContextCompat.checkSelfPermission(
@@ -112,6 +147,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
         if (!fineGranted && !coarseGranted) {
             Log.w(TAG, "Location permission not granted to Trackd")
             reply(context, sender, "Trackd: Location permission unavailable on device.")
+            onComplete()
             return
         }
 
@@ -138,6 +174,7 @@ class SmsCommandReceiver : BroadcastReceiver() {
                                 "(±${location.accuracy.toInt()}m) " +
                                 "https://maps.google.com/?q=${location.latitude},${location.longitude}"
                         reply(context, sender, message)
+                        onComplete()
                     } else {
                         Log.w(TAG, "getCurrentLocation returned null, querying lastLocation fallback...")
                         client.lastLocation.addOnSuccessListener { lastLoc ->
@@ -149,8 +186,10 @@ class SmsCommandReceiver : BroadcastReceiver() {
                             } else {
                                 reply(context, sender, "Trackd: GPS fix currently unavailable. Device may be indoors.")
                             }
+                            onComplete()
                         }.addOnFailureListener {
                             reply(context, sender, "Trackd: GPS fix unavailable.")
+                            onComplete()
                         }
                     }
                 }
@@ -165,13 +204,16 @@ class SmsCommandReceiver : BroadcastReceiver() {
                         } else {
                             reply(context, sender, "Trackd: Failed to acquire GPS lock: ${error.message}")
                         }
+                        onComplete()
                     }.addOnFailureListener {
                         reply(context, sender, "Trackd: Failed to acquire GPS lock: ${error.message}")
+                        onComplete()
                     }
                 }
         } catch (e: SecurityException) {
             Log.e(TAG, "SecurityException during handleLocate", e)
             reply(context, sender, "Trackd: Location security exception on device.")
+            onComplete()
         }
     }
 
@@ -261,11 +303,18 @@ class SmsCommandReceiver : BroadcastReceiver() {
     }
 
     private fun parseCommand(body: String): Pair<String, String>? {
-        val clean = body.trim()
-        val match = Regex("^#(LOCATE|SIREN|STOP_SIREN|SILENCE|STOLEN|SAFE|WIPE)#\\s*\\[?(\\S{4,12})\\]?\\s*$", RegexOption.IGNORE_CASE)
-            .matchEntire(clean) ?: return null
+        var clean = body.trim()
+        if (clean.startsWith("TRACKD", ignoreCase = true)) {
+            clean = clean.substring(6).trim()
+        }
+        // Match #CMD# [PIN], #CMD [PIN], or CMD [PIN]
+        // CMD: LOCATE, SIREN, STOP_SIREN, STOP SIREN, SILENCE, STOLEN, SAFE, WIPE
+        val regex = Regex("^(?:#)?(LOCATE|SIREN|STOP_SIREN|STOP\\s+SIREN|SILENCE|STOLEN|SAFE|WIPE)(?:#)?\\s*\\[?([A-Za-z0-9]{4,12})\\]?\\s*$", RegexOption.IGNORE_CASE)
+        val match = regex.matchEntire(clean) ?: return null
+        val rawCmd = match.groupValues[1].uppercase().replace("\\s+".toRegex(), "_")
+        val cmd = if (rawCmd == "SILENCE") "STOP_SIREN" else rawCmd
         val pin = match.groupValues[2].trim().removeSurrounding("[", "]")
-        return match.groupValues[1].uppercase() to pin
+        return cmd to pin
     }
 
     private fun pinMatches(context: Context, pin: String): Boolean {

@@ -201,6 +201,18 @@ export default function PermissionChecklist() {
       done: null,
       actionLabel: "Allow",
       action: () => TrackdBridge.requestOverlayPermission()
+    },
+    {
+      key: "autostart",
+      label: "Background Auto-start (OEM)",
+      hint: "Prevents Android from killing offline SMS & alarm listeners",
+      done: localStorage.getItem("trackd_autostart_confirmed") === "true",
+      actionLabel: "Configure",
+      action: async () => {
+        await TrackdBridge.openAutostartSettings();
+        localStorage.setItem("trackd_autostart_confirmed", "true");
+        await sync();
+      }
     }
   ];
 
