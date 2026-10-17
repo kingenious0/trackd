@@ -61,7 +61,7 @@ export default function Navbar({
             }`}
           >
             <Download className="w-3.5 h-3.5 shrink-0 hidden xs:inline" />
-            <span className="whitespace-nowrap">Get app</span>
+            <span className="whitespace-nowrap">Get app (Android)</span>
           </button>
 
           {/* User Account / Sign Out if logged in */}

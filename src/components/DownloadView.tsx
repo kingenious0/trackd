@@ -13,7 +13,9 @@ import {
   Terminal,
   Volume2,
   Radio,
-  ChevronRight
+  ChevronRight,
+  Apple,
+  Bell
 } from 'lucide-react';
 import Navbar from './Navbar';
 
@@ -32,6 +34,12 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
   ]);
   const [isSimulating, setIsSimulating] = useState(false);
   const [byteCounter, setByteCounter] = useState(140);
+  const [iosEmail, setIosEmail] = useState('');
+  const [iosSubmitted, setIosSubmitted] = useState(false);
+
+  const isIOS = typeof window !== 'undefined' && 
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
   const downloadUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/downloads/trackd-latest.apk` 
@@ -41,6 +49,17 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
     navigator.clipboard.writeText(SHA256_HASH);
     setCopiedHash(true);
     setTimeout(() => setCopiedHash(false), 2500);
+  };
+
+  const handleIosNotify = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!iosEmail || !iosEmail.includes('@')) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem('trackd_ios_waitlist') || '[]');
+      existing.push({ email: iosEmail, date: new Date().toISOString() });
+      localStorage.setItem('trackd_ios_waitlist', JSON.stringify(existing));
+    } catch {}
+    setIosSubmitted(true);
   };
 
   const runSimulatedCommand = (cmd: string) => {
@@ -163,6 +182,12 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               When a phone is stolen, thieves immediately pull the SIM, turn off Wi-Fi, or toggle Airplane Mode. 
               Trackd stays alive over plain 2G GSM SMS, protects Mobile Money wallets, and locks power-down menus without relying on Google Play Services.
             </p>
+            <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-300 pt-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300">
+                <Smartphone className="w-3.5 h-3.5 text-[#00F29D]" />
+                Available for Android • iPhone support coming soon
+              </span>
+            </div>
           </div>
 
           {/* Action Row */}
@@ -173,7 +198,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               className="py-3 px-6 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 active:scale-[0.98] transition text-[#070B14] font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-[#00F29D]/20 border border-[#00F29D]/40"
             >
               <Download className="w-4 h-4 text-[#070B14]" />
-              <span>Download Trackd APK (v1.2.6)</span>
+              <span>Download Trackd App</span>
             </a>
             
             <button
@@ -398,66 +423,125 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             </div>
           </div>
 
-          {/* Right Column: Download & QR Card */}
+          {/* Right Column: Download & QR Card (or iOS Smart Notice) */}
           <div className="md:col-span-5">
-            <div className="rounded-3xl bg-[#0D1322] border border-white/10 p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden ring-1 ring-white/5">
-              <div className="absolute top-0 right-0 w-36 h-36 bg-[#00F29D]/10 rounded-full blur-3xl pointer-events-none" />
-              
-              {/* QR Code Container */}
-              <div className="w-48 h-48 rounded-2xl bg-[#070B14] p-3.5 flex items-center justify-center border border-[#00F29D]/20 shadow-inner">
-                <div className="p-2 bg-white rounded-xl shadow-md">
-                  <QRCodeSVG 
-                    value={downloadUrl} 
-                    size={160}
-                    level="M"
-                    includeMargin={false}
-                  />
+            {isIOS ? (
+              <div className="rounded-3xl bg-[#0D1322] border border-white/10 p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden ring-1 ring-white/5 space-y-4">
+                <div className="absolute top-0 right-0 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white shadow-lg">
+                  <Apple className="w-7 h-7 text-white" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-white">
+                    Trackd is currently Android-only
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    iPhones already have strong built-in protection — make sure to turn on{" "}
+                    <strong className="text-white">Find My iPhone</strong> and{" "}
+                    <strong className="text-white">Stolen Device Protection</strong> in your iOS Settings.
+                  </p>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    We&apos;re currently engineering Trackd&apos;s extra offline MoMo and anti-theft defense for iOS.
+                  </p>
+                </div>
+
+                {iosSubmitted ? (
+                  <div className="w-full p-3.5 rounded-xl bg-[#00F29D]/10 border border-[#00F29D]/30 text-[#00F29D] text-xs font-semibold flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>You&apos;re on the list! We&apos;ll notify you when iOS is ready.</span>
+                  </div>
+                ) : (
+                  <form onSubmit={handleIosNotify} className="w-full space-y-2 pt-1">
+                    <input
+                      type="email"
+                      required
+                      value={iosEmail}
+                      onChange={(e) => setIosEmail(e.target.value)}
+                      placeholder="Enter email for iOS early access"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#070B14] border border-white/10 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-[#00F29D]/50"
+                    />
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-[#00F29D]/20 active:scale-[0.98]"
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                      <span>Notify me when iPhone is ready</span>
+                    </button>
+                  </form>
+                )}
+
+                <div className="pt-2 border-t border-white/5 w-full">
+                  <button
+                    type="button"
+                    onClick={() => onSwitchToLogin()}
+                    className="text-xs text-slate-400 hover:text-white transition inline-flex items-center gap-1"
+                  >
+                    <span>Need to track an Android phone from this iPhone? Open Web Console</span>
+                    <span>&rarr;</span>
+                  </button>
                 </div>
               </div>
+            ) : (
+              <div className="rounded-3xl bg-[#0D1322] border border-white/10 p-6 flex flex-col items-center text-center shadow-2xl relative overflow-hidden ring-1 ring-white/5">
+                <div className="absolute top-0 right-0 w-36 h-36 bg-[#00F29D]/10 rounded-full blur-3xl pointer-events-none" />
+                
+                {/* QR Code Container */}
+                <div className="w-48 h-48 rounded-2xl bg-[#070B14] p-3.5 flex items-center justify-center border border-[#00F29D]/20 shadow-inner">
+                  <div className="p-2 bg-white rounded-xl shadow-md">
+                    <QRCodeSVG 
+                      value={downloadUrl} 
+                      size={160}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+                </div>
 
-              <div className="mt-4 space-y-1">
-                <p className="text-sm font-semibold text-white">
-                  Scan with your phone camera
-                </p>
-                <p className="text-xs text-slate-400">
-                  Or tap below to download directly to this device
-                </p>
-              </div>
+                <div className="mt-4 space-y-1">
+                  <p className="text-sm font-semibold text-white">
+                    Scan with your phone camera
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Or tap below to download directly to this device
+                  </p>
+                </div>
 
-              {/* Download Action Button */}
-              <a
-                href="/downloads/trackd-latest.apk"
-                download="trackd-v1.2.6.apk"
-                className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
-              >
-                <Download className="w-4 h-4 text-[#070B14]" />
-                <span>Download Trackd APK</span>
-              </a>
-
-              {/* Version & Checksum Meta */}
-              <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
-                <span className="font-mono text-[#00F29D] font-bold bg-[#00F29D]/10 px-2 py-0.5 rounded-full border border-[#00F29D]/25">
-                  v1.2.6 Latest
-                </span>
-                <span>•</span>
-                <span>Production Key</span>
-                <span>•</span>
-                <button
-                  type="button"
-                  onClick={handleCopyHash}
-                  title="Click to copy full SHA-256 checksum"
-                  className="hover:text-white flex items-center gap-1 transition"
+                {/* Download Action Button */}
+                <a
+                  href="/downloads/trackd-latest.apk"
+                  download="trackd-v1.2.6.apk"
+                  className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
                 >
-                  <span className="font-mono">SHA-256</span>
-                  {copiedHash ? (
-                    <span className="text-[#00F29D] font-medium flex items-center gap-0.5">
-                      <CheckCircle2 className="w-3 h-3" /> Copied
-                    </span>
-                  ) : (
-                    <Copy className="w-3 h-3 text-slate-400" />
-                  )}
-                </button>
-              </div>
+                  <Download className="w-4 h-4 text-[#070B14]" />
+                  <span>Download Trackd App</span>
+                </a>
+
+                {/* Version & Checksum Meta */}
+                <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-[11px] text-slate-400">
+                  <span className="font-mono text-[#00F29D] font-bold bg-[#00F29D]/10 px-2 py-0.5 rounded-full border border-[#00F29D]/25">
+                    v1.2.6 Latest
+                  </span>
+                  <span>•</span>
+                  <span>Production Key</span>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyHash}
+                    title="Click to copy full SHA-256 checksum"
+                    className="hover:text-white flex items-center gap-1 transition"
+                  >
+                    <span className="font-mono">SHA-256</span>
+                    {copiedHash ? (
+                      <span className="text-[#00F29D] font-medium flex items-center gap-0.5">
+                        <CheckCircle2 className="w-3 h-3" /> Copied
+                      </span>
+                    ) : (
+                      <Copy className="w-3 h-3 text-slate-400" />
+                    )}
+                  </button>
+                </div>
 
               {/* What's New Pill in Card */}
               <div className="mt-4 w-full p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-left text-[11px] text-slate-300 space-y-1">
@@ -471,6 +555,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
                 </ul>
               </div>
             </div>
+            )}
           </div>
         </section>
 

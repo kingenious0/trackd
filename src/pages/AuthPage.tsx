@@ -219,7 +219,7 @@ export default function AuthPage({
             </h1>
             <p className="mt-1 text-xs text-slate-400">
               {mode === "signin" 
-                ? "See your phone's location, battery and telemetry from any browser."
+                ? "See your phone's location, battery and status from any browser."
                 : "Create an account to activate real-time anti-theft defense."}
             </p>
           </div>
@@ -315,14 +315,14 @@ export default function AuthPage({
               {/* First time prompt */}
               <div className="pt-3 border-t border-white/5 text-center space-y-1">
                 <p className="text-xs text-slate-400">
-                  First time here? You&apos;ll need the Trackd app on your phone before you can track it.
+                  First time here? You&apos;ll need the Trackd Android app on your phone before you can track it.
                 </p>
                 <button
                   type="button"
                   onClick={onSwitchToDownload}
                   className="text-xs font-semibold text-[#00F29D] hover:underline inline-flex items-center gap-1"
                 >
-                  <span>Download Trackd App (APK)</span>
+                  <span>Download Trackd App</span>
                   <span>&rarr;</span>
                 </button>
               </div>
