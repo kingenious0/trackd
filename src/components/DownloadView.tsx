@@ -18,6 +18,7 @@ import {
   Bell
 } from 'lucide-react';
 import Navbar from './Navbar';
+import { trackEvent } from '../lib/firebase';
 
 interface DownloadViewProps {
   onSwitchToLogin: () => void;
@@ -58,6 +59,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
       const existing = JSON.parse(localStorage.getItem('trackd_ios_waitlist') || '[]');
       existing.push({ email: iosEmail, date: new Date().toISOString() });
       localStorage.setItem('trackd_ios_waitlist', JSON.stringify(existing));
+      trackEvent('ios_waitlist_signup', { platform: 'ios' });
     } catch {}
     setIosSubmitted(true);
   };
@@ -195,6 +197,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
             <a
               href="/downloads/trackd-latest.apk"
               download="trackd-v1.2.6.apk"
+              onClick={() => trackEvent("apk_download_click", { location: "hero_primary", version: "1.2.6" })}
               className="py-3 px-6 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 active:scale-[0.98] transition text-[#070B14] font-bold text-sm flex items-center gap-2.5 shadow-xl shadow-[#00F29D]/20 border border-[#00F29D]/40"
             >
               <Download className="w-4 h-4 text-[#070B14]" />
@@ -512,6 +515,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
                 <a
                   href="/downloads/trackd-latest.apk"
                   download="trackd-v1.2.6.apk"
+                  onClick={() => trackEvent("apk_download_click", { location: "qr_card_direct", version: "1.2.6" })}
                   className="mt-5 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] hover:brightness-105 text-[#070B14] font-bold text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition shadow-lg shadow-[#00F29D]/25 border border-[#00F29D]/40"
                 >
                   <Download className="w-4 h-4 text-[#070B14]" />

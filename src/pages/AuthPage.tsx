@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword,
   updateProfile
 } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { auth, trackEvent } from "../lib/firebase";
 import { saveProfile, apiUrl } from "../lib/api";
 import { sha256Hex, toUnsignedE164, encryptPin } from "../lib/crypto";
 import {
@@ -78,6 +78,7 @@ export default function AuthPage({
     setBusy(true);
     try {
       await signInWithEmailAndPassword(auth(), email.trim(), password);
+      trackEvent("web_login_success", { method: "password" });
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -174,6 +175,7 @@ export default function AuthPage({
         encryptedPin: pinBlob,
         createdAt: new Date().toISOString()
       });
+      trackEvent("web_signup_success", { method: "password_otp" });
       setNotice("Account created — you are signed in.");
     } catch (err) {
       setError(friendlyError(err));

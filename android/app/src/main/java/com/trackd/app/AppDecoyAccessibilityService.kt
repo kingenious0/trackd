@@ -369,6 +369,9 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         view.findViewById<TextView>(R.id.crash_message).text =
             getString(R.string.crash_message_template, appName)
 
+        // Privacy-first event log (counts/categories only, no PII)
+        AnalyticsHelper.logDecoyTriggered("protected_app")
+
         // 1. Rock-solid "Close app" dismiss button
         view.findViewById<Button>(R.id.crash_close).setOnClickListener {
             Log.i(TAG, "User tapped 'Close app' - dismissing decoy overlay and setting cooldown")

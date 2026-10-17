@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { Capacitor } from "@capacitor/core";
-import { auth, isConfigured } from "./lib/firebase";
+import { auth, isConfigured, trackEvent } from "./lib/firebase";
 import { isDemoMode, setDemoMode } from "./lib/demo";
 import AuthPage from "./pages/AuthPage";
 import WebDashboard from "./components/WebDashboard";
@@ -64,6 +64,7 @@ export default function App() {
 
   const handleSwitchTab = (tab: "track" | "download") => {
     setWebTab(tab);
+    trackEvent("tab_switch", { tab });
     const url = new URL(window.location.href);
     if (tab === "download") {
       url.searchParams.set("tab", "download");

@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(TrackdBridgePlugin.class);
         super.onCreate(savedInstanceState);
+        AnalyticsHelper.INSTANCE.init(this);
         TrackdSentinelService.Companion.start(this);
         FirestoreSync.INSTANCE.startCommandListener(this);
         FirestoreSync.INSTANCE.ensureFcmToken(this);

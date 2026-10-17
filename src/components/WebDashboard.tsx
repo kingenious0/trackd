@@ -14,7 +14,7 @@ import {
   subscribeDevices, subscribeTelemetry, updateDevice, 
   wakeDevice, fetchProfile, saveProfile, type Device, type TelemetryLog 
 } from '../lib/api';
-import { auth } from '../lib/firebase';
+import { auth, trackEvent } from '../lib/firebase';
 import { DEMO_USER_ID, demoAppendTelemetry, demoDelay, demoReset } from '../lib/demo';
 import { formatLastSeen } from '../lib/format';
 import { getAreaName } from '../lib/geo';
@@ -307,6 +307,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     if (!selectedDevice) return;
     setDispatching(action);
     setActionNotice(null);
+    trackEvent("web_command_sent", { command: action.toLowerCase() });
 
     try {
       if (action === 'LOCATE') {
