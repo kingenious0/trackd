@@ -20,6 +20,9 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     private var overlayWindow: WindowManager? = null
     private var overlayView: View? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var lastOverlayDismissedAt: Long = 0L
+    private var autoDismissRunnable: Runnable? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -47,6 +50,12 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         val foregroundPackage = event.packageName?.toString() ?: return
         if (foregroundPackage == packageName) return
         if (!AegisState.isStolen(this)) return
+
+        // Check dismissal cooldown (prevent infinite re-trigger loop after user taps Close App)
+        val now = System.currentTimeMillis()
+        if (now - lastOverlayDismissedAt < OVERLAY_COOLDOWN_MS) {
+            return
+        }
 
         // 0. Power-Menu & Shutdown Dialog Interception (While device is marked stolen)
         if (isPowerMenuOrShutdownEvent(event, foregroundPackage)) {
@@ -359,10 +368,45 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         val view = inflater.inflate(R.layout.dialog_fake_crash, null, false)
         view.findViewById<TextView>(R.id.crash_message).text =
             getString(R.string.crash_message_template, appName)
+
+        // 1. Rock-solid "Close app" dismiss button
         view.findViewById<Button>(R.id.crash_close).setOnClickListener {
-            hideCrashOverlay()
-            returnHome()
+            Log.i(TAG, "User tapped 'Close app' - dismissing decoy overlay and setting cooldown")
+            dismissOverlayWithCooldown()
         }
+
+        // 2. Secret Escape Hatch: 4 quick taps on the dialog title dismisses the overlay immediately
+        var secretTapCount = 0
+        var lastSecretTap = 0L
+        view.findViewById<TextView>(R.id.crash_title)?.setOnClickListener {
+            val tapNow = System.currentTimeMillis()
+            if (tapNow - lastSecretTap < 600L) {
+                secretTapCount++
+                if (secretTapCount >= 4) {
+                    Log.i(TAG, "Secret escape hatch triggered (4 taps on title)")
+                    dismissOverlayWithCooldown()
+                }
+            } else {
+                secretTapCount = 1
+            }
+            lastSecretTap = tapNow
+        }
+
+        // 3. Tapping the outer dimmed background also dismisses safely
+        view.findViewById<View>(R.id.crash_root)?.setOnClickListener {
+            // Root card absorbs clicks
+        }
+        view.setOnClickListener {
+            dismissOverlayWithCooldown()
+        }
+
+        // 4. Auto-dismiss watchdog: if user doesn't interact within 15 seconds, auto-dismiss to home
+        val autoDismiss = Runnable {
+            Log.i(TAG, "Decoy auto-dismiss watchdog fired (15s timeout)")
+            dismissOverlayWithCooldown()
+        }
+        autoDismissRunnable = autoDismiss
+        mainHandler.postDelayed(autoDismiss, 15000L)
 
         // AccessibilityService has native privilege to display TYPE_ACCESSIBILITY_OVERLAY
         // without requiring the user to grant "Display over other apps"
@@ -373,19 +417,22 @@ class AppDecoyAccessibilityService : AccessibilityService() {
             WindowManager.LayoutParams.TYPE_SYSTEM_ALERT
         }
 
+        // CRITICAL FIX: Do NOT use FLAG_NOT_TOUCH_MODAL because it causes touch events
+        // on the "Close app" button to fall through to the background app on Samsung and others!
+        // We use standard modal dialog flags with FLAG_NOT_FOCUSABLE so the soft keyboard isn't trapped.
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             windowType,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.CENTER
             dimAmount = 0.85f
-            flags = flags or WindowManager.LayoutParams.FLAG_DIM_BEHIND
         }
 
         try {
@@ -410,7 +457,18 @@ class AppDecoyAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun dismissOverlayWithCooldown() {
+        lastOverlayDismissedAt = System.currentTimeMillis()
+        hideCrashOverlay()
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        returnHome()
+    }
+
     private fun hideCrashOverlay() {
+        autoDismissRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            autoDismissRunnable = null
+        }
         val view = overlayView ?: return
         try {
             if (view.isAttachedToWindow) {
@@ -454,6 +512,7 @@ class AppDecoyAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "AegisDecoy"
+        private const val OVERLAY_COOLDOWN_MS = 8000L // 8-second cooldown after dismiss
         private var instance: AppDecoyAccessibilityService? = null
 
         fun onStolenStateChanged(stolen: Boolean) {
