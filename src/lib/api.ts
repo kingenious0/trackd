@@ -32,7 +32,7 @@ const LOGS = "telemetry_logs";
 
 const API_ORIGIN = Capacitor.isNativePlatform()
   ? ((import.meta.env.VITE_API_ORIGIN as string | undefined) ??
-    "https://trackd-livid.vercel.app")
+    "https://gettrackd.me")
   : "";
 
 export function apiUrl(path: string): string {
