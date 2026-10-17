@@ -166,21 +166,21 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00F29D]"></span>
             </span>
             <span className="text-[11px] font-mono font-bold tracking-wider uppercase text-[#00F29D]">
-              THE UNKILLABLE RECOVERY NETWORK
+              WORKS WITHOUT INTERNET
             </span>
           </div>
 
           {/* Main Headline */}
           <div className="space-y-4">
             <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight text-white leading-[1.1] sm:leading-[1.12]">
-              Like Google Find My Device.<br />
+              Thieves kill the internet first.<br />
               <span className="bg-gradient-to-r from-[#00F29D] via-[#2BF7B5] to-[#4EFAFF] bg-clip-text text-transparent">
-                Except it actually works offline.
+                Trackd doesn&apos;t need it.
               </span>
             </h1>
             <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-300 leading-relaxed font-normal">
-              When a phone is stolen, thieves immediately pull the SIM, turn off Wi-Fi, or toggle Airplane Mode. 
-              Trackd stays alive over plain 2G GSM SMS, protects Mobile Money wallets, and locks power-down menus without relying on Google Play Services.
+              When a phone is taken, thieves immediately pull the SIM, turn off Wi-Fi, or toggle Airplane Mode. 
+              Trackd stays reachable over plain SMS, protects your Mobile Money wallets, and prevents shutdown without needing a data connection.
             </p>
             <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-300 pt-1">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300">
@@ -214,7 +214,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
           {/* Meta Trust Strip */}
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-mono text-slate-400">
             <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Production Signed
+              <CheckCircle2 className="w-3.5 h-3.5" /> Verified Build
             </span>
             <span>•</span>
             <span>Android 8.0 to 15 (API 35)</span>
@@ -225,7 +225,7 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
               title="Copy SHA-256 fingerprint"
               className="hover:text-white flex items-center gap-1 transition"
             >
-              <span>SHA-256: b0f478...bbd9</span>
+              <span>SHA-256: 32e265...b0c8</span>
               {copiedHash ? (
                 <span className="text-[#00F29D] font-bold">✓ Copied</span>
               ) : (
@@ -563,10 +563,10 @@ export default function DownloadView({ onSwitchToLogin }: DownloadViewProps) {
         <section className="space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <h2 className="text-xl sm:text-2xl font-extrabold text-white">
-              How Trackd Compares to Google Find Hub
+              Understanding Offline Device Recovery
             </h2>
             <p className="text-xs sm:text-sm text-slate-400">
-              An honest, technical breakdown of where each service excels and why direct GSM fallback matters.
+              An honest, technical look at standard tracking tools versus Trackd&apos;s direct cellular channel.
             </p>
           </div>
 
