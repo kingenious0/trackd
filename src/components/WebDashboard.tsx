@@ -29,6 +29,7 @@ interface Props {
   onExitDemo?: () => void;
   onSignOut?: () => void;
   onSwitchToDownload?: () => void;
+  onSwitchToAdmin?: () => void;
 }
 
 // Apple Maps inspired precision marker
@@ -94,7 +95,7 @@ function MapController({ coords }: { coords: [number, number] }) {
   );
 }
 
-export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut, onSwitchToDownload }: Props) {
+export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut, onSwitchToDownload, onSwitchToAdmin }: Props) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetryLog[]>([]);
@@ -446,8 +447,11 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
         onSwitchTab={(tab) => {
           if (tab === "download" && onSwitchToDownload) {
             onSwitchToDownload();
+          } else if (tab === "admin" && onSwitchToAdmin) {
+            onSwitchToAdmin();
           }
         }}
+        onSwitchToAdmin={onSwitchToAdmin}
         user={user}
         onSignOut={handleSignOut}
       />

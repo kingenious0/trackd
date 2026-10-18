@@ -8,6 +8,7 @@ import AuthPage from "./pages/AuthPage";
 import WebDashboard from "./components/WebDashboard";
 import MobileClientView from "./components/MobileClientView";
 import DownloadView from "./components/DownloadView";
+import AdminConsole from "./components/AdminConsole";
 import { MonitorPlay, ShieldCheck, TriangleAlert } from "lucide-react";
 
 function SetupNotice({ onDemo }: { onDemo: () => void }) {
@@ -58,16 +59,21 @@ export default function App() {
   const forceWebView = isDev && viewOverride === "web";
   const showApk = forceApkView || (isNative && !forceWebView);
 
-  const [webTab, setWebTab] = useState<"track" | "download">(() => {
-    return searchParams.get("tab") === "download" ? "download" : "track";
+  const [webTab, setWebTab] = useState<"track" | "download" | "admin">(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "admin") return "admin";
+    if (tabParam === "download") return "download";
+    return "track";
   });
 
-  const handleSwitchTab = (tab: "track" | "download") => {
+  const handleSwitchTab = (tab: "track" | "download" | "admin") => {
     setWebTab(tab);
     trackEvent("tab_switch", { tab });
     const url = new URL(window.location.href);
     if (tab === "download") {
       url.searchParams.set("tab", "download");
+    } else if (tab === "admin") {
+      url.searchParams.set("tab", "admin");
     } else {
       url.searchParams.delete("tab");
     }
@@ -194,13 +200,24 @@ export default function App() {
   } else if (webTab === "download") {
     content = <DownloadView onSwitchToLogin={() => handleSwitchTab("track")} />;
   } else if (user) {
-    content = (
-      <WebDashboard
-        user={user}
-        onSignOut={() => signOut(auth())}
-        onSwitchToDownload={() => handleSwitchTab("download")}
-      />
-    );
+    if (webTab === "admin") {
+      content = (
+        <AdminConsole
+          user={user}
+          onExitAdmin={() => handleSwitchTab("track")}
+          onSwitchToDownload={() => handleSwitchTab("download")}
+        />
+      );
+    } else {
+      content = (
+        <WebDashboard
+          user={user}
+          onSignOut={() => signOut(auth())}
+          onSwitchToDownload={() => handleSwitchTab("download")}
+          onSwitchToAdmin={() => handleSwitchTab("admin")}
+        />
+      );
+    }
   } else {
     content = (
       <AuthPage 

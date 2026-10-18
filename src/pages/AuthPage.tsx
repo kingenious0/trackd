@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import {
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   updateProfile
 } from "firebase/auth";
@@ -71,6 +72,34 @@ export default function AuthPage({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotNotice, setForgotNotice] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  async function handleResetPassword(e: FormEvent) {
+    e.preventDefault();
+    setForgotError(null);
+    setForgotNotice(null);
+    const targetEmail = forgotEmail.trim();
+    if (!targetEmail) {
+      setForgotError("Please enter your account email address.");
+      return;
+    }
+    setForgotBusy(true);
+    try {
+      await sendPasswordResetEmail(auth(), targetEmail);
+      trackEvent("password_reset_sent", { method: "email" });
+      setForgotNotice(`Password reset link sent to ${targetEmail}. Check your inbox and spam folder.`);
+    } catch (err) {
+      setForgotError(friendlyError(err));
+    } finally {
+      setForgotBusy(false);
+    }
+  }
 
   async function handleSignin(event: FormEvent) {
     event.preventDefault();
@@ -278,10 +307,24 @@ export default function AuthPage({
                 </div>
               </label>
 
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-slate-300">
-                  Password
-                </span>
+              <div className="block">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-medium text-slate-300">
+                    Password
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setForgotError(null);
+                      setForgotNotice(null);
+                      setShowForgotModal(true);
+                    }}
+                    className="text-[11px] font-medium text-[#00F29D] hover:underline focus:outline-none"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-slate-500" />
                   <input
@@ -305,7 +348,7 @@ export default function AuthPage({
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </label>
+              </div>
 
               {error && <AuthAlert kind="err" text={error} />}
 
@@ -518,6 +561,81 @@ export default function AuthPage({
           )}
         </div>
       </main>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-[#0D1322] border border-white/10 p-6 space-y-4 shadow-2xl relative overflow-hidden ring-1 ring-white/10">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-[#00F29D]/10 border border-[#00F29D]/20 text-[#00F29D]">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Reset Password</h3>
+                  <p className="text-[11px] text-slate-400">Receive a recovery link via email</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Enter the email address registered with your Trackd account. We'll send an official Firebase password reset link straight to your inbox.
+            </p>
+
+            <form onSubmit={handleResetPassword} className="space-y-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-slate-300">
+                  Account Email
+                </span>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+                  <input
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#070B14] border border-white/10 text-xs text-white placeholder:text-slate-500 focus:border-[#00F29D] focus:ring-1 focus:ring-[#00F29D]/30 focus:outline-none transition"
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                  />
+                </div>
+              </label>
+
+              {forgotError && <AuthAlert kind="err" text={forgotError} />}
+              {forgotNotice && <AuthAlert kind="ok" text={forgotNotice} />}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-semibold text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotBusy}
+                  className="flex-1 py-2 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00DCA0] text-[#070B14] font-bold text-xs flex items-center justify-center gap-1.5 hover:brightness-105 active:scale-[0.98] transition shadow-md shadow-[#00F29D]/20 disabled:opacity-50"
+                >
+                  {forgotBusy ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Mail className="w-3.5 h-3.5" />
+                  )}
+                  <span>Send Reset Link</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Responsible Use Footer */}
       <footer className="w-full py-6 text-center text-[11px] text-neutral-400 border-t border-white/5 px-4">

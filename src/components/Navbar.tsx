@@ -3,11 +3,12 @@ import type { User } from "firebase/auth";
 import TrackdLogo from "./TrackdLogo";
 
 interface NavbarProps {
-  currentTab: "track" | "download";
-  onSwitchTab: (tab: "track" | "download") => void;
+  currentTab: "track" | "download" | "admin";
+  onSwitchTab: (tab: "track" | "download" | "admin") => void;
   user?: User | null;
   onSignOut?: () => void;
   showAccountBadge?: boolean;
+  onSwitchToAdmin?: () => void;
 }
 
 export default function Navbar({
@@ -16,6 +17,7 @@ export default function Navbar({
   user,
   onSignOut,
   showAccountBadge = true,
+  onSwitchToAdmin,
 }: NavbarProps) {
   return (
     <header className="w-full border-b border-white/10 bg-[#070B14]/95 backdrop-blur-md px-4 sm:px-6 py-2.5 sticky top-0 z-[1200] select-none">
@@ -63,6 +65,23 @@ export default function Navbar({
             <Download className="w-3.5 h-3.5 shrink-0 hidden xs:inline" />
             <span className="whitespace-nowrap">Get app (Android)</span>
           </button>
+
+          {/* Admin Console Shortcut (Only visible for Kingenious admin account) */}
+          {user && (user.email?.toLowerCase() === "kingenious0@gmail.com" || currentTab === "admin") && (
+            <button
+              type="button"
+              onClick={() => (onSwitchToAdmin ? onSwitchToAdmin() : onSwitchTab("admin"))}
+              title="Trackd Admin Console"
+              aria-label="Admin Console"
+              className={`flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-semibold font-mono transition active:scale-95 border ${
+                currentTab === "admin"
+                  ? "bg-purple-600 text-white border-purple-400 shadow-sm font-bold"
+                  : "bg-purple-950/40 text-purple-300 border-purple-500/30 hover:bg-purple-900/50"
+              }`}
+            >
+              <span>Admin</span>
+            </button>
+          )}
 
           {/* User Account / Sign Out if logged in */}
           {user && showAccountBadge && (
