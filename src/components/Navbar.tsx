@@ -66,8 +66,8 @@ export default function Navbar({
             <span className="whitespace-nowrap">Get app (Android)</span>
           </button>
 
-          {/* Admin Console Shortcut (Only visible for Kingenious admin account) */}
-          {user && (user.email?.toLowerCase() === "kingenious0@gmail.com" || currentTab === "admin") && (
+          {/* Admin Console Shortcut (STRICTLY visible ONLY for the master admin account) */}
+          {user && user.email?.toLowerCase() === "kingenious0@gmail.com" && (
             <button
               type="button"
               onClick={() => (onSwitchToAdmin ? onSwitchToAdmin() : onSwitchTab("admin"))}

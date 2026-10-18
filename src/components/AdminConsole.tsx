@@ -95,11 +95,18 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
     setError(null);
     try {
       const idToken = await user.getIdToken(true);
-      const res = await fetch(apiUrl("/api/admin/stats"), {
+      const endpoint = apiUrl("/api/admin/stats");
+      const res = await fetch(endpoint, {
         headers: {
           Authorization: `Bearer ${idToken}`
         }
       });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          `Server returned non-JSON response from ${endpoint} (HTTP ${res.status}). Ensure the production backend is deployed.`
+        );
+      }
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || `HTTP ${res.status}`);
@@ -331,203 +338,346 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
 
         {/* TAB 1: DEVICES */}
         {activeTab === "devices" && (
-          <div className="rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
-                  <tr>
-                    <th className="p-3.5">Device & Model</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5">Battery</th>
-                    <th className="p-3.5">Last Coordinates</th>
-                    <th className="p-3.5">Last Seen</th>
-                    <th className="p-3.5">FCM Push</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-sans">
-                  {filteredDevices.length === 0 ? (
+          <div className="space-y-3">
+            {/* Mobile View: Cards */}
+            <div className="grid grid-cols-1 gap-3 md:hidden">
+              {filteredDevices.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 rounded-2xl bg-[#0D1322] border border-white/10 text-xs">
+                  No devices matched your query.
+                </div>
+              ) : (
+                filteredDevices.map((dev) => (
+                  <div key={dev.id} className="p-4 rounded-2xl bg-[#0D1322] border border-white/10 space-y-3 shadow-lg">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-white text-sm">{dev.deviceName}</div>
+                        <div className="font-mono text-[11px] text-slate-400">{dev.deviceModel}</div>
+                        <div className="font-mono text-[10px] text-slate-500 truncate max-w-[200px]">{dev.id}</div>
+                      </div>
+                      {dev.isStolen ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                          <Lock className="w-3 h-3" />
+                          STOLEN
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                          <ShieldCheck className="w-3 h-3" />
+                          Safe
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Battery</span>
+                        <span className="text-slate-300 font-bold">{dev.battery != null ? `${dev.battery}%` : "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">FCM Push</span>
+                        <span className={dev.fcmToken ? "text-emerald-400 font-bold" : "text-slate-500"}>
+                          {dev.fcmToken ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] font-mono">
+                      <span className="text-slate-500">
+                        {dev.lastSeenAt ? new Date(dev.lastSeenAt).toLocaleTimeString() : "Never seen"}
+                      </span>
+                      {dev.lastTelemetry?.lat != null && (
+                        <a
+                          href={`https://www.google.com/maps?q=${dev.lastTelemetry.lat},${dev.lastTelemetry.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#00F29D] hover:underline flex items-center gap-1"
+                        >
+                          <span>Open Map</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500">
-                        No devices matched your query.
-                      </td>
+                      <th className="p-3.5">Device & Model</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5">Battery</th>
+                      <th className="p-3.5">Last Coordinates</th>
+                      <th className="p-3.5">Last Seen</th>
+                      <th className="p-3.5">FCM Push</th>
                     </tr>
-                  ) : (
-                    filteredDevices.map((dev) => (
-                      <tr key={dev.id} className="hover:bg-white/[0.02] transition">
-                        <td className="p-3.5">
-                          <div className="font-semibold text-white">{dev.deviceName}</div>
-                          <div className="font-mono text-[11px] text-slate-400">{dev.deviceModel}</div>
-                          <div className="font-mono text-[10px] text-slate-500 truncate max-w-[150px]">
-                            {dev.id}
-                          </div>
-                        </td>
-
-                        <td className="p-3.5">
-                          {dev.isStolen ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                              <Lock className="w-3 h-3" />
-                              STOLEN LOCKED
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                              <ShieldCheck className="w-3 h-3" />
-                              Armed & Safe
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="p-3.5">
-                          <div className="flex items-center gap-1.5 font-mono text-slate-300">
-                            <Battery className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{dev.battery != null ? `${dev.battery}%` : "—"}</span>
-                          </div>
-                        </td>
-
-                        <td className="p-3.5">
-                          {dev.lastTelemetry?.lat != null ? (
-                            <div>
-                              <a
-                                href={`https://www.google.com/maps?q=${dev.lastTelemetry.lat},${dev.lastTelemetry.lng}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-mono text-[11px] text-[#00F29D] hover:underline flex items-center gap-1"
-                              >
-                                <span>
-                                  {dev.lastTelemetry.lat.toFixed(4)}, {dev.lastTelemetry.lng.toFixed(4)}
-                                </span>
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                              <div className="text-[10px] text-slate-500 font-mono">
-                                ±{Math.round(dev.lastTelemetry.accuracy)}m ({dev.lastTelemetry.trigger})
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-500 font-mono text-[11px]">No GPS fix</span>
-                          )}
-                        </td>
-
-                        <td className="p-3.5 text-slate-400 text-[11px] font-mono">
-                          {dev.lastSeenAt ? new Date(dev.lastSeenAt).toLocaleString() : "Never"}
-                        </td>
-
-                        <td className="p-3.5">
-                          {dev.fcmToken ? (
-                            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" title="FCM Token Active" />
-                          ) : (
-                            <span className="inline-block w-2 h-2 rounded-full bg-slate-600" title="No FCM Token" />
-                          )}
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-sans">
+                    {filteredDevices.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                          No devices matched your query.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredDevices.map((dev) => (
+                        <tr key={dev.id} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5">
+                            <div className="font-semibold text-white">{dev.deviceName}</div>
+                            <div className="font-mono text-[11px] text-slate-400">{dev.deviceModel}</div>
+                            <div className="font-mono text-[10px] text-slate-500 truncate max-w-[150px]">
+                              {dev.id}
+                            </div>
+                          </td>
+
+                          <td className="p-3.5">
+                            {dev.isStolen ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                <Lock className="w-3 h-3" />
+                                STOLEN LOCKED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                                <ShieldCheck className="w-3 h-3" />
+                                Armed & Safe
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-1.5 font-mono text-slate-300">
+                              <Battery className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{dev.battery != null ? `${dev.battery}%` : "—"}</span>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5">
+                            {dev.lastTelemetry?.lat != null ? (
+                              <div>
+                                <a
+                                  href={`https://www.google.com/maps?q=${dev.lastTelemetry.lat},${dev.lastTelemetry.lng}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-mono text-[11px] text-[#00F29D] hover:underline flex items-center gap-1"
+                                >
+                                  <span>
+                                    {dev.lastTelemetry.lat.toFixed(4)}, {dev.lastTelemetry.lng.toFixed(4)}
+                                  </span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <div className="text-[10px] text-slate-500 font-mono">
+                                  ±{Math.round(dev.lastTelemetry.accuracy)}m ({dev.lastTelemetry.trigger})
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 font-mono text-[11px]">No GPS fix</span>
+                            )}
+                          </td>
+
+                          <td className="p-3.5 text-slate-400 text-[11px] font-mono">
+                            {dev.lastSeenAt ? new Date(dev.lastSeenAt).toLocaleString() : "Never"}
+                          </td>
+
+                          <td className="p-3.5">
+                            {dev.fcmToken ? (
+                              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" title="FCM Token Active" />
+                            ) : (
+                              <span className="inline-block w-2 h-2 rounded-full bg-slate-600" title="No FCM Token" />
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
         {/* TAB 2: USERS */}
         {activeTab === "users" && (
-          <div className="rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
-                  <tr>
-                    <th className="p-3.5">Owner Name</th>
-                    <th className="p-3.5">Email</th>
-                    <th className="p-3.5">Owner Phone</th>
-                    <th className="p-3.5">Emergency Contact</th>
-                    <th className="p-3.5">Joined</th>
-                    <th className="p-3.5 text-right">Support Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-sans">
-                  {filteredUsers.length === 0 ? (
+          <div className="space-y-3">
+            {/* Mobile View: User Cards */}
+            <div className="grid grid-cols-1 gap-3 md:hidden">
+              {filteredUsers.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 rounded-2xl bg-[#0D1322] border border-white/10 text-xs">
+                  No registered users found.
+                </div>
+              ) : (
+                filteredUsers.map((u) => (
+                  <div key={u.id} className="p-4 rounded-2xl bg-[#0D1322] border border-white/10 space-y-2 shadow-lg">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-bold text-white text-sm">{u.fullName}</div>
+                        <div className="font-mono text-xs text-slate-400">{u.email}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingUser(u);
+                          setEditEmergencyPhone(u.emergencyContactPhone || "");
+                          setEditFullName(u.fullName || "");
+                          setEditNotice(null);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-[#00F29D]/10 hover:bg-[#00F29D]/20 border border-[#00F29D]/30 text-[11px] font-semibold text-[#00F29D] transition"
+                      >
+                        Rescue
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-xs font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Owner Phone</span>
+                        <span className="text-slate-300">{u.phoneNumber || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-500 block">Emergency Contact</span>
+                        <span className="text-amber-300">{u.emergencyContactPhone || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500">
-                        No registered users found.
-                      </td>
+                      <th className="p-3.5">Owner Name</th>
+                      <th className="p-3.5">Email</th>
+                      <th className="p-3.5">Owner Phone</th>
+                      <th className="p-3.5">Emergency Contact</th>
+                      <th className="p-3.5">Joined</th>
+                      <th className="p-3.5 text-right">Support Action</th>
                     </tr>
-                  ) : (
-                    filteredUsers.map((u) => (
-                      <tr key={u.id} className="hover:bg-white/[0.02] transition">
-                        <td className="p-3.5 font-semibold text-white">{u.fullName}</td>
-                        <td className="p-3.5 font-mono text-slate-300">{u.email}</td>
-                        <td className="p-3.5 font-mono text-slate-400">{u.phoneNumber || "—"}</td>
-                        <td className="p-3.5 font-mono text-amber-300">
-                          {u.emergencyContactPhone || "—"}
-                        </td>
-                        <td className="p-3.5 text-slate-400 text-[11px] font-mono">
-                          {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
-                        </td>
-                        <td className="p-3.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingUser(u);
-                              setEditEmergencyPhone(u.emergencyContactPhone || "");
-                              setEditFullName(u.fullName || "");
-                              setEditNotice(null);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-[#00F29D] transition"
-                          >
-                            Edit / Rescue
-                          </button>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-sans">
+                    {filteredUsers.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                          No registered users found.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredUsers.map((u) => (
+                        <tr key={u.id} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5 font-semibold text-white">{u.fullName}</td>
+                          <td className="p-3.5 font-mono text-slate-300">{u.email}</td>
+                          <td className="p-3.5 font-mono text-slate-400">{u.phoneNumber || "—"}</td>
+                          <td className="p-3.5 font-mono text-amber-300">
+                            {u.emergencyContactPhone || "—"}
+                          </td>
+                          <td className="p-3.5 text-slate-400 text-[11px] font-mono">
+                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingUser(u);
+                                setEditEmergencyPhone(u.emergencyContactPhone || "");
+                                setEditFullName(u.fullName || "");
+                                setEditNotice(null);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-[#00F29D] transition"
+                            >
+                              Edit / Rescue
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
         {/* TAB 3: TELEMETRY LOGS */}
         {activeTab === "telemetry" && (
-          <div className="rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
-                  <tr>
-                    <th className="p-3.5">Timestamp</th>
-                    <th className="p-3.5">Trigger Reason</th>
-                    <th className="p-3.5">Device ID</th>
-                    <th className="p-3.5">Battery</th>
-                    <th className="p-3.5">Accuracy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 font-sans">
-                  {recentLogs.length === 0 ? (
+          <div className="space-y-3">
+            {/* Mobile View: Event Cards */}
+            <div className="grid grid-cols-1 gap-2.5 md:hidden">
+              {recentLogs.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 rounded-2xl bg-[#0D1322] border border-white/10 text-xs">
+                  No telemetry triggers recorded yet.
+                </div>
+              ) : (
+                recentLogs.map((log) => (
+                  <div key={log.id} className="p-3 rounded-2xl bg-[#0D1322] border border-white/10 flex items-center justify-between text-xs font-mono shadow-md">
+                    <div>
+                      <span className="font-bold text-[#00F29D] flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-[#00F29D]" />
+                        {log.triggerReason}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block truncate max-w-[180px]">
+                        {log.deviceId}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-300 font-bold block">{log.battery != null ? `${log.battery}%` : "—"}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : "—"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block rounded-2xl bg-[#0D1322] border border-white/10 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-white/5 border-b border-white/10 text-slate-400 font-mono text-[11px]">
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-500">
-                        No telemetry triggers recorded yet.
-                      </td>
+                      <th className="p-3.5">Timestamp</th>
+                      <th className="p-3.5">Trigger Reason</th>
+                      <th className="p-3.5">Device ID</th>
+                      <th className="p-3.5">Battery</th>
+                      <th className="p-3.5">Accuracy</th>
                     </tr>
-                  ) : (
-                    recentLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-white/[0.02] transition">
-                        <td className="p-3.5 font-mono text-slate-400 text-[11px]">
-                          {log.timestamp ? new Date(log.timestamp).toLocaleString() : "—"}
-                        </td>
-                        <td className="p-3.5">
-                          <span className="inline-flex items-center gap-1 font-mono font-bold text-[11px] text-[#00F29D]">
-                            <Zap className="w-3 h-3 text-[#00F29D]" />
-                            {log.triggerReason}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-mono text-slate-300 text-[11px]">{log.deviceId}</td>
-                        <td className="p-3.5 font-mono text-slate-400">
-                          {log.battery != null ? `${log.battery}%` : "—"}
-                        </td>
-                        <td className="p-3.5 font-mono text-slate-500">
-                          {log.accuracy != null ? `±${Math.round(log.accuracy)}m` : "—"}
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-sans">
+                    {recentLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                          No telemetry triggers recorded yet.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      recentLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-white/[0.02] transition">
+                          <td className="p-3.5 font-mono text-slate-400 text-[11px]">
+                            {log.timestamp ? new Date(log.timestamp).toLocaleString() : "—"}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="inline-flex items-center gap-1 font-mono font-bold text-[11px] text-[#00F29D]">
+                              <Zap className="w-3 h-3 text-[#00F29D]" />
+                              {log.triggerReason}
+                            </span>
+                          </td>
+                          <td className="p-3.5 font-mono text-slate-300 text-[11px]">{log.deviceId}</td>
+                          <td className="p-3.5 font-mono text-slate-400">
+                            {log.battery != null ? `${log.battery}%` : "—"}
+                          </td>
+                          <td className="p-3.5 font-mono text-slate-500">
+                            {log.accuracy != null ? `±${Math.round(log.accuracy)}m` : "—"}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

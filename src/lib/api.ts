@@ -30,10 +30,20 @@ const USERS = "users";
 const DEVICES = "devices";
 const LOGS = "telemetry_logs";
 
-const API_ORIGIN = Capacitor.isNativePlatform()
-  ? ((import.meta.env.VITE_API_ORIGIN as string | undefined) ??
-    "https://gettrackd.me")
-  : "";
+const API_ORIGIN = (() => {
+  if (import.meta.env.VITE_API_ORIGIN) {
+    return import.meta.env.VITE_API_ORIGIN as string;
+  }
+  if (Capacitor.isNativePlatform()) {
+    return "https://gettrackd.me";
+  }
+  // If developing on localhost (vite dev server), Vite does not run Vercel serverless /api functions.
+  // Direct /api requests to production backend:
+  if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+    return "https://gettrackd.me";
+  }
+  return "";
+})();
 
 export function apiUrl(path: string): string {
   return `${API_ORIGIN}${path}`;
