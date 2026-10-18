@@ -7,6 +7,7 @@
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg?style=for-the-badge&logo=android)](https://gettrackd.me)
 [![Web Console](https://img.shields.io/badge/Web_Console-gettrackd.me-blue.svg?style=for-the-badge&logo=vercel)](https://gettrackd.me)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Native_Sentinel-purple.svg?style=for-the-badge&logo=kotlin)](https://kotlinlang.org)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Trackd-ff69b4.svg?style=for-the-badge&logo=githubsponsors)](https://paystack.shop/pay/support-trackd)
 
 <p align="center">
   <strong>Thieves kill the internet first. Trackd doesn't need it.</strong><br>
@@ -16,6 +17,7 @@
 <p align="center">
   <a href="https://gettrackd.me"><strong>Official Web Console »</strong></a> ·
   <a href="https://gettrackd.me/downloads/trackd-latest.apk"><strong>Download APK (v1.2.6) »</strong></a> ·
+  <a href="https://paystack.shop/pay/support-trackd"><strong>💖 Support Project »</strong></a> ·
   <a href="https://github.com/kingenious0/trackd/issues">Report Bug »</a>
 </p>
 
