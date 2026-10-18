@@ -5,7 +5,7 @@ import {
   Battery, Check, ChevronUp, ChevronDown, 
   LogOut, MapPin, Signal, Clock, Compass, Layers, 
   Plus, Minus, ExternalLink, MonitorPlay, Loader2,
-  MessageSquare, Copy, Settings2, KeyRound, Phone, X
+  MessageSquare, Copy, Settings2, KeyRound, Phone, X, Smartphone
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -274,7 +274,31 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     return () => unsub();
   }, [selectedDevice?.id, userId]);
 
+  const [userBrowserCoords, setUserBrowserCoords] = useState<[number, number] | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locateStartTime, setLocateStartTime] = useState<number | null>(null);
+
+  // Retrieve user's local browser position as an ambient map center when no device is paired
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserBrowserCoords([pos.coords.latitude, pos.coords.longitude]);
+        },
+        () => {},
+        { timeout: 6000, maximumAge: 300000 }
+      );
+    }
+  }, []);
+
   const latestLog = telemetry[0] ?? null;
+
+  // True only when device actually has real coordinates
+  const hasValidLocation = Boolean(
+    (selectedDevice?.lastTelemetry?.lat && selectedDevice?.lastTelemetry?.lng) ||
+    (latestLog?.lat && latestLog?.lng)
+  );
+
   const currentCoords: [number, number] = useMemo(() => {
     if (selectedDevice?.lastTelemetry?.lat && selectedDevice?.lastTelemetry?.lng) {
       return [selectedDevice.lastTelemetry.lat, selectedDevice.lastTelemetry.lng];
@@ -282,43 +306,87 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     if (latestLog?.lat && latestLog?.lng) {
       return [latestLog.lat, latestLog.lng];
     }
-    // Default fallback to Kumasi/Accra center
-    return [6.7019, -1.6805];
-  }, [selectedDevice, latestLog]);
+    if (userBrowserCoords) {
+      return userBrowserCoords;
+    }
+    // Neutral fallback (Accra / national centroid) without dropping a phantom marker
+    return [5.6037, -0.1870];
+  }, [selectedDevice, latestLog, userBrowserCoords]);
 
   const accuracyMeters = selectedDevice?.lastTelemetry?.accuracy ?? latestLog?.accuracy ?? 15;
   const isStolen = Boolean(selectedDevice?.isStolen);
-  const batteryLevel = selectedDevice?.lastTelemetry?.battery ?? selectedDevice?.battery ?? 94;
+  const batteryLevel = selectedDevice?.lastTelemetry?.battery ?? selectedDevice?.battery ?? null;
 
-  // Reverse geocoding lookup
+  // Reverse geocoding lookup only when real device coordinates exist
   useEffect(() => {
     let active = true;
-    if (currentCoords[0] !== 0 && currentCoords[1] !== 0) {
+    if (hasValidLocation && currentCoords[0] !== 0 && currentCoords[1] !== 0) {
       getAreaName(currentCoords[0], currentCoords[1]).then((name) => {
         if (active) setAreaName(name);
       });
+    } else if (!hasValidLocation) {
+      setAreaName(devices.length === 0 ? 'No Device Linked' : 'Awaiting GPS Fix');
     }
     return () => {
       active = false;
     };
-  }, [currentCoords]);
+  }, [currentCoords, hasValidLocation, devices.length]);
+
+  // Watch for incoming live telemetry update after user clicks "Locate Live"
+  useEffect(() => {
+    if (!isLocating || !locateStartTime) return;
+
+    const lastSeenTime = selectedDevice?.lastSeenAt ? new Date(selectedDevice.lastSeenAt).getTime() : 0;
+    const latestLogTime = latestLog?.timestamp ? new Date(latestLog.timestamp).getTime() : 0;
+
+    const mostRecentTime = Math.max(lastSeenTime, latestLogTime);
+
+    if (mostRecentTime >= locateStartTime) {
+      setIsLocating(false);
+      setLocateStartTime(null);
+      const acc = Math.round(selectedDevice?.lastTelemetry?.accuracy ?? latestLog?.accuracy ?? 15);
+      setActionNotice(`🎯 Live GPS coordinates acquired from handset! Accuracy: ±${acc}m.`);
+    }
+  }, [selectedDevice?.lastSeenAt, selectedDevice?.lastTelemetry, latestLog, isLocating, locateStartTime]);
+
+  // Timeout failsafe: if device does not reply in 22 seconds (e.g. phone is offline or dozing)
+  useEffect(() => {
+    if (!isLocating || !locateStartTime) return;
+    const timer = setTimeout(() => {
+      setIsLocating(false);
+      setLocateStartTime(null);
+      setActionNotice('⚠️ Live ping timed out. Handset may be in deep sleep or mobile data is turned off. Use the SMS command below to wake satellite GPS instantly!');
+    }, 22000);
+    return () => clearTimeout(timer);
+  }, [isLocating, locateStartTime]);
 
   const handleAction = async (action: 'LOCATE' | 'SIREN' | 'STOLEN' | 'SAFE' | 'WIPE') => {
-    if (!selectedDevice) return;
+    if (!selectedDevice) {
+      setActionNotice('Please select or pair an Android device first.');
+      return;
+    }
     setDispatching(action);
     setActionNotice(null);
     trackEvent("web_command_sent", { command: action.toLowerCase() });
 
     try {
       if (action === 'LOCATE') {
+        setIsLocating(true);
+        const startTs = Date.now();
+        setLocateStartTime(startTs);
+        setActionNotice(`Pinging ${selectedDevice.deviceName} via high-priority satellite wake...`);
+
         await updateDevice(selectedDevice.id, { requestLocate: true });
         if (demo) {
           await demoDelay(900);
           demoAppendTelemetry('LOCATE_REQUEST');
           await updateDevice(selectedDevice.id, { requestLocate: false });
+          setIsLocating(false);
+          setLocateStartTime(null);
+          setActionNotice('Live GPS coordinates acquired (Demo Simulation).');
+          return;
         }
         await wakeDevice(selectedDevice.id, 'LOCATE');
-        setActionNotice('Live GPS coordinates requested from handset.');
       } else if (action === 'SIREN') {
         await updateDevice(selectedDevice.id, { requestSiren: true, stopSiren: false });
         await wakeDevice(selectedDevice.id, 'SIREN');
@@ -343,6 +411,8 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
     } catch (e) {
       const errMessage = e instanceof Error ? e.message : String(e);
       setActionNotice('Action dispatch error: ' + errMessage);
+      setIsLocating(false);
+      setLocateStartTime(null);
     } finally {
       setDispatching(null);
     }
@@ -402,71 +472,118 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             <MapRecenter coords={currentCoords} />
             <MapController coords={currentCoords} />
 
-            {/* Accuracy radius ring */}
-            <Circle
-              center={currentCoords}
-              radius={accuracyMeters}
-              pathOptions={{
-                color: isStolen ? '#EF4444' : '#2563EB',
-                fillColor: isStolen ? '#EF4444' : '#2563EB',
-                fillOpacity: 0.12,
-                weight: 1.5,
-                dashArray: '4, 6'
-              }}
-            />
+            {/* Accuracy radius ring & Pin ONLY rendered if real location fix exists */}
+            {hasValidLocation && (
+              <>
+                <Circle
+                  center={currentCoords}
+                  radius={accuracyMeters}
+                  pathOptions={{
+                    color: isStolen ? '#EF4444' : '#2563EB',
+                    fillColor: isStolen ? '#EF4444' : '#2563EB',
+                    fillOpacity: 0.12,
+                    weight: 1.5,
+                    dashArray: '4, 6'
+                  }}
+                />
 
-            {/* Precision Apple Radar Pin Marker */}
-            <Marker position={currentCoords} icon={createApplePin(isStolen)}>
-              <Popup className="apple-popup">
-                <div className="p-1 font-sans">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className={`inline-block w-2 h-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-600'}`} />
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600">
-                      {isStolen ? 'Theft Mode Active' : 'Live Position'}
-                    </span>
-                  </div>
-                  <p className="font-bold text-sm text-slate-900">
-                    {selectedDevice?.deviceName ?? 'Target Device'}
-                  </p>
-                  <p className="text-xs font-medium text-slate-700 mt-0.5">
-                    {areaName}
-                  </p>
-                  <p className="text-[11px] font-mono text-slate-500 mt-1">
-                    {currentCoords[0].toFixed(5)}°, {currentCoords[1].toFixed(5)}°
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    Accuracy: ±{Math.round(accuracyMeters)}m
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
+                {/* Precision Apple Radar Pin Marker */}
+                <Marker position={currentCoords} icon={createApplePin(isStolen)}>
+                  <Popup className="apple-popup">
+                    <div className="p-1 font-sans">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className={`inline-block w-2 h-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-600'}`} />
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600">
+                          {isStolen ? 'Theft Mode Active' : 'Live Position'}
+                        </span>
+                      </div>
+                      <p className="font-bold text-sm text-slate-900">
+                        {selectedDevice?.deviceName ?? 'Target Device'}
+                      </p>
+                      <p className="text-xs font-medium text-slate-700 mt-0.5">
+                        {areaName}
+                      </p>
+                      <p className="text-[11px] font-mono text-slate-500 mt-1">
+                        {currentCoords[0].toFixed(5)}°, {currentCoords[1].toFixed(5)}°
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Accuracy: ±{Math.round(accuracyMeters)}m
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
+              </>
+            )}
           </MapContainer>
         </div>
 
-        {/* Top Floating Utility HUD Badge on Desktop */}
-        <div className="absolute top-4 right-20 z-[400] hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] text-xs text-slate-800 dark:text-slate-200">
-          <span className="flex h-2 w-2 relative">
-            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isStolen ? 'bg-rose-400' : 'bg-blue-400'}`} />
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${isStolen ? 'bg-rose-500' : 'bg-blue-500'}`} />
-          </span>
-          <span className="font-semibold text-xs tracking-tight">{areaName}</span>
-          <span className="text-slate-400">|</span>
-          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-            {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
-          </span>
-          <button
-            onClick={() => setDarkMapMode(!darkMapMode)}
-            className={`ml-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition flex items-center gap-1 ${
-              darkMapMode 
-                ? 'bg-blue-600/10 text-blue-500 border-blue-500/20' 
-                : 'bg-black/5 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/5 dark:border-white/5 hover:bg-black/10'
-            }`}
-            title="Toggle Dark Map Theme"
-          >
-            <Layers className="w-3 h-3" />
-            {darkMapMode ? 'Dark Map' : 'Standard'}
-          </button>
-        </div>
+        {/* On-Map Floating Guidance Card when awaiting location or without devices */}
+        {!hasValidLocation && (
+          <div className="absolute top-20 md:top-6 left-4 right-4 md:left-[430px] md:right-8 z-[400] max-w-md mx-auto pointer-events-auto">
+            {devices.length === 0 ? (
+              <div className="p-5 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-center space-y-3">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-[#00F29D]/10 border border-[#00F29D]/20 flex items-center justify-center text-[#00F29D]">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">No Android Devices Paired</h3>
+                  <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto leading-relaxed">
+                    Install Trackd on your Android phone and sign in with <span className="text-[#00F29D] font-mono">{email}</span> to enable live satellite tracking.
+                  </p>
+                </div>
+                <div className="pt-1 flex items-center justify-center">
+                  <button
+                    onClick={() => onSwitchToDownload && onSwitchToDownload()}
+                    className="py-2 px-4 rounded-xl bg-gradient-to-r from-[#00F29D] to-[#00C888] text-[#070B14] font-bold text-xs shadow-md shadow-[#00F29D]/20 hover:opacity-95 active:scale-95 transition"
+                  >
+                    Download Trackd APK
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-3xl bg-slate-900/95 backdrop-blur-2xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                  <Compass className="w-5 h-5 animate-spin" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-xs font-bold text-white truncate">
+                    {selectedDevice?.deviceName ?? 'Device'} Connected
+                  </h4>
+                  <p className="text-[11px] text-slate-300 mt-0.5 leading-snug">
+                    Awaiting first GPS lock. Click <strong className="text-[#00F29D]">Locate Live</strong> below to ping your phone now.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Top Floating Utility HUD Badge on Desktop (Active only with valid location) */}
+        {hasValidLocation && (
+          <div className="absolute top-4 right-20 z-[400] hidden lg:flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/5 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.12)] text-xs text-slate-800 dark:text-slate-200">
+            <span className="flex h-2 w-2 relative">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isStolen ? 'bg-rose-400' : 'bg-blue-400'}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${isStolen ? 'bg-rose-500' : 'bg-blue-500'}`} />
+            </span>
+            <span className="font-semibold text-xs tracking-tight">{areaName}</span>
+            <span className="text-slate-400">|</span>
+            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
+            </span>
+            <button
+              onClick={() => setDarkMapMode(!darkMapMode)}
+              className={`ml-1 px-2 py-1 rounded-lg text-[10px] font-medium border transition flex items-center gap-1 ${
+                darkMapMode 
+                  ? 'bg-blue-600/10 text-blue-500 border-blue-500/20' 
+                  : 'bg-black/5 dark:bg-white/5 text-slate-600 dark:text-slate-300 border-black/5 dark:border-white/5 hover:bg-black/10'
+              }`}
+              title="Toggle Dark Map Theme"
+            >
+              <Layers className="w-3 h-3" />
+              {darkMapMode ? 'Dark Map' : 'Standard'}
+            </button>
+          </div>
+        )}
 
         {/* 2. Apple Maps Floating Command Card (Desktop: Left Float / Mobile: Bottom Sheet) */}
         <div className={`
@@ -485,9 +602,9 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             <div className="w-12 h-1.5 rounded-full bg-white/20 mb-2" />
             <div className="flex items-center justify-between w-full px-6">
               <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-500'}`} />
+                <span className={`h-2.5 w-2.5 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : hasValidLocation ? 'bg-[#00F29D]' : 'bg-slate-500'}`} />
                 <span className="font-semibold text-sm text-white truncate max-w-[180px]">
-                  {selectedDevice?.deviceName ?? 'Target Device'}
+                  {selectedDevice?.deviceName ?? (devices.length === 0 ? 'No Device Paired' : 'Trackd Radar')}
                 </span>
               </div>
               <div className="flex items-center gap-1 text-xs font-semibold text-blue-400">
@@ -513,18 +630,22 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   )}
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-white mt-0.5 flex items-center gap-2">
-                  {selectedDevice?.deviceName ?? 'Redmi Note 14 Pro'}
-                  <span className={`h-2 w-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-blue-500'}`} />
+                  {selectedDevice?.deviceName ?? (devices.length === 0 ? 'No Device Paired' : 'Trackd Handset')}
+                  {hasValidLocation && (
+                    <span className={`h-2 w-2 rounded-full ${isStolen ? 'bg-rose-500 animate-ping' : 'bg-[#00F29D]'}`} />
+                  )}
                 </h1>
                 <span className="text-[11px] text-slate-400 block truncate max-w-[200px]">
                   {email}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-emerald-400">
-                  <Battery className="w-3.5 h-3.5" />
-                  {batteryLevel}%
-                </div>
+                {batteryLevel !== null && (
+                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-emerald-400">
+                    <Battery className="w-3.5 h-3.5" />
+                    {batteryLevel}%
+                  </div>
+                )}
                 <button 
                   onClick={handleSignOut}
                   title={demo ? 'Exit Demo' : 'Sign Out'}
@@ -568,20 +689,29 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             <div className="grid grid-cols-2 gap-2.5">
               <button 
                 onClick={() => handleAction('LOCATE')}
-                disabled={dispatching !== null}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
+                disabled={dispatching !== null || isLocating || !selectedDevice}
+                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl font-medium text-xs border transition active:scale-[0.98] disabled:opacity-50 ${
+                  isLocating 
+                    ? 'bg-[#00F29D]/15 text-[#00F29D] border-[#00F29D]/40 animate-pulse'
+                    : 'bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border-white/10'
+                }`}
               >
-                {dispatching === 'LOCATE' ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-[#00F29D]" />
+                {isLocating || dispatching === 'LOCATE' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-[#00F29D]" />
+                    <span>Locating…</span>
+                  </>
                 ) : (
-                  <Crosshair className="w-4 h-4 text-[#00F29D]" />
+                  <>
+                    <Crosshair className="w-4 h-4 text-[#00F29D]" />
+                    <span>Locate Live</span>
+                  </>
                 )}
-                Locate Live
               </button>
 
               <button 
                 onClick={() => handleAction('SIREN')}
-                disabled={dispatching !== null}
+                disabled={dispatching !== null || !selectedDevice}
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-slate-200 hover:text-white font-medium text-xs border border-white/10 transition disabled:opacity-50"
               >
                 {dispatching === 'SIREN' ? (
@@ -594,16 +724,23 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
             </div>
 
             {/* Directions in Google Maps Action Button */}
-            <a
-              href={googleDirectionsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00F29D]/15 to-[#00C888]/15 hover:from-[#00F29D]/25 hover:to-[#00C888]/25 border border-[#00F29D]/30 text-[#00F29D] font-semibold text-xs flex items-center justify-center gap-2 transition active:scale-[0.98]"
-            >
-              <Compass className="w-4 h-4 text-[#00F29D]" />
-              <span>Get Directions in Google Maps</span>
-              <ExternalLink className="w-3 h-3 opacity-60" />
-            </a>
+            {hasValidLocation ? (
+              <a
+                href={googleDirectionsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#00F29D]/15 to-[#00C888]/15 hover:from-[#00F29D]/25 hover:to-[#00C888]/25 border border-[#00F29D]/30 text-[#00F29D] font-semibold text-xs flex items-center justify-center gap-2 transition active:scale-[0.98]"
+              >
+                <Compass className="w-4 h-4 text-[#00F29D]" />
+                <span>Get Directions in Google Maps</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            ) : (
+              <div className="w-full py-2.5 px-4 rounded-xl bg-white/[0.02] border border-white/5 text-slate-500 text-xs flex items-center justify-center gap-2">
+                <Compass className="w-4 h-4 text-slate-600" />
+                <span>Directions unlock once live GPS fix is received</span>
+              </div>
+            )}
 
             {/* Offline Detection Banner - Bridges Web directly to SMS */}
             {isOffline && (
@@ -634,7 +771,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   <span>Area Location</span>
                 </div>
                 <span className="font-medium text-[#00F29D] max-w-[210px] text-right truncate" title={areaName}>
-                  {areaName}
+                  {hasValidLocation ? areaName : 'No GPS Fix Recorded'}
                 </span>
               </div>
 
@@ -644,18 +781,26 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   <span>Fix Coordinates</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-white font-medium">
-                    {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
-                  </span>
-                  <a 
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#00F29D] hover:text-[#00DCA0]"
-                    title="Open in Maps"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+                  {hasValidLocation ? (
+                    <>
+                      <span className="font-mono text-white font-medium">
+                        {currentCoords[0].toFixed(4)}°, {currentCoords[1].toFixed(4)}°
+                      </span>
+                      <a 
+                        href={googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[#00F29D] hover:text-[#00DCA0]"
+                        title="Open in Maps"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </>
+                  ) : (
+                    <span className="font-mono text-slate-500 text-[11px]">
+                      Awaiting Satellite Lock
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -664,7 +809,11 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   <Signal className={`w-4 h-4 shrink-0 ${isOffline ? 'text-amber-400' : 'text-emerald-400'}`} />
                   <span>Status</span>
                 </div>
-                {isOffline ? (
+                {!selectedDevice ? (
+                  <span className="font-medium text-slate-500 text-xs">
+                    No Device
+                  </span>
+                ) : isOffline ? (
                   <span className="font-medium text-amber-400 flex items-center gap-1.5 text-xs">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                     Offline (Heartbeat Stale)
@@ -683,7 +832,7 @@ export default function WebDashboard({ user, demo = false, onExitDemo, onSignOut
                   <span>Last Reported</span>
                 </div>
                 <span className="font-mono text-slate-300">
-                  {selectedDevice?.lastSeenAt ? formatLastSeen(selectedDevice.lastSeenAt) : 'Just now'}
+                  {selectedDevice?.lastSeenAt ? formatLastSeen(selectedDevice.lastSeenAt) : 'Never'}
                 </span>
               </div>
             </div>
