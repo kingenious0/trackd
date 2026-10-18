@@ -138,9 +138,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error("admin console stats error", error);
+    const msg = error instanceof Error ? error.message : String(error);
     return res.status(500).json({
       success: false,
-      error: "Internal server error fetching admin stats"
+      error: `Admin backend error: ${msg}`
     });
   }
 }
