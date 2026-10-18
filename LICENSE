@@ -1,21 +1,29 @@
-MIT License
+Trackd Proprietary & Confidential Software License
+Copyright (c) 2026 King Ingenious / Trackd. All Rights Reserved.
 
-Copyright (c) 2026 Trackd Contributors
+NOTICE: ALL RIGHTS RESERVED. This software, including its source code, architecture, 
+algorithms, database schemas, user interfaces, branding, and associated documentation, 
+constitutes the confidential, proprietary, and exclusive intellectual property of the author 
+(King Ingenious / Trackd).
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. NO LICENSE GRANTED:
+No license, right, title, or interest in or to this software or any part thereof is granted, 
+conveyed, assigned, or transferred to any person or entity. 
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+2. PROHIBITION OF USE, COPYING, AND DISTRIBUTION:
+Except as expressly authorized in writing signed by the author:
+  a. You may not copy, reproduce, clone, scrape, mirror, or republish this source code or 
+     any derivative works in whole or in part.
+  b. You may not modify, adapt, translate, decompile, disassemble, reverse engineer, or create 
+     derivative works based on this software or its underlying mechanisms.
+  c. You may not distribute, sublicense, rent, lease, sell, commercially exploit, or claim 
+     authorship or ownership of this software or any component thereof.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+3. OWNERSHIP ENFORCEMENT & LEGAL REMEDIES:
+The author actively reserves all legal and equitable rights and remedies available under national 
+and international copyright laws, trade secret legislation, and intellectual property treaties. 
+Any unauthorized claim of ownership, plagiarism, distribution, or reproduction will be subject 
+to immediate statutory copyright infringement claims, Digital Millennium Copyright Act (DMCA) 
+takedowns, and legal prosecution to the fullest extent permitted by law.
+
+For licensing or commercial inquiries, visit https://gettrackd.me

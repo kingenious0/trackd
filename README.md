@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg?style=for-the-badge)](LICENSE)
 [![Release](https://img.shields.io/badge/Release-v1.2.6-00F29D.svg?style=for-the-badge)](https://gettrackd.me/downloads/trackd-latest.apk)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg?style=for-the-badge&logo=android)](https://gettrackd.me)
 [![Web Console](https://img.shields.io/badge/Web_Console-gettrackd.me-blue.svg?style=for-the-badge&logo=vercel)](https://gettrackd.me)
@@ -384,5 +384,8 @@ adb install -r android/app/build/outputs/apk/release/app-release.apk
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+## 📄 License & Intellectual Property
+
+Copyright © 2026 King Ingenious / Trackd. All Rights Reserved.
+
+This software, its source code, architecture, and associated design assets are strictly proprietary. Unauthorized copying, distribution, reverse engineering, rebranding, or claiming ownership is strictly prohibited by law. See [LICENSE](LICENSE) for terms.
