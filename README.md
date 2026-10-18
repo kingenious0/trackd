@@ -1,24 +1,42 @@
 # 🛡️ Trackd
 
-> **Offline-First Phone Protection, Device Recovery & Financial Account Safety for Android & Web**  
-> *Locate, secure, and recover your lost phone—even without an active internet connection.*
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/badge/Release-v1.2.6-00F29D.svg?style=for-the-badge)](https://gettrackd.me/downloads/trackd-latest.apk)
+[![Android](https://img.shields.io/badge/Android-8.0%2B-green.svg?style=for-the-badge&logo=android)](https://gettrackd.me)
+[![Web Console](https://img.shields.io/badge/Web_Console-gettrackd.me-blue.svg?style=for-the-badge&logo=vercel)](https://gettrackd.me)
+[![Kotlin](https://img.shields.io/badge/Kotlin-Native_Sentinel-purple.svg?style=for-the-badge&logo=kotlin)](https://kotlinlang.org)
+
+<p align="center">
+  <strong>Thieves kill the internet first. Trackd doesn't need it.</strong><br>
+  Offline-first phone recovery, SMS GPS radar, fake crash decoys, and mobile money lockdown.
+</p>
+
+<p align="center">
+  <a href="https://gettrackd.me"><strong>Official Web Console »</strong></a> ·
+  <a href="https://gettrackd.me/downloads/trackd-latest.apk"><strong>Download APK (v1.2.6) »</strong></a> ·
+  <a href="https://github.com/kingenious0/trackd/issues">Report Bug »</a>
+</p>
+
+</div>
 
 ---
 
 ## 📌 Overview
 
-**Trackd** is an offline-resilient mobile protection and device recovery platform built for real-world scenarios. Most standard "Find My" utilities stop working the moment connectivity is interrupted:
-1. **The Instant Disconnect:** Phones are often switched to Airplane Mode or have Mobile Data and Wi-Fi toggled off immediately.
-2. **SIM Card Removal:** When a SIM card is ejected, internet access is severed and owners lose cloud-based tracking.
-3. **Power-Down Attempts:** A device may be turned off quickly to evade tracking before a GPS coordinate can be sent.
-4. **Financial Account Risks:** While a device is unlocked or in the wrong hands, banking and Mobile Money apps (MTN MoMo, Telecel Cash, AT Money, bank apps) are vulnerable to unauthorized access.
-5. **Unauthorized Device Reset:** Attempts may be made to wipe the phone through system settings.
+**Trackd** is an offline-resilient mobile protection and device recovery platform built for real-world scenarios. Standard "Find My" utilities stop working the moment connectivity is severed:
+1. **The Instant Disconnect:** Phones are switched to Airplane Mode or have Mobile Data toggled off immediately.
+2. **SIM Card Removal:** When a SIM card is ejected, internet access is lost and owners lose cloud-based tracking.
+3. **Power-Down Attempts:** Thieves attempt to power down the device to evade detection before GPS coordinates can be broadcast.
+4. **Financial Account Risks:** While unlocked or in the wrong hands, banking and Mobile Money apps (MTN MoMo, Telecel Cash, AT Money, bank apps) are vulnerable to unauthorized draining.
+5. **Unauthorized Device Reset:** Attempts are made to wipe the phone through system settings.
 
 Trackd addresses these challenges using a **Dual-Engine Recovery Architecture**:
 
 * **⚡ Layer 1 — Cloud Live Telemetry (Web Dashboard):**
   * Powered by the free **Firebase Spark** tier (Authentication, Cloud Firestore, Cloud Messaging).
-  * Connects your phone with the **Trackd Web Dashboard** (`https://trackd-livid.vercel.app`).
+  * Connects your phone with the **Trackd Web Dashboard** ([`https://gettrackd.me`](https://gettrackd.me)).
   * Displays real-time GPS coordinates with automatic reverse geocoding to street-level addresses using OpenStreetMap (OSM) Nominatim.
   * Sends remote commands when connected: Live GPS Locate, High-Decibel Siren, Lost Mode Arming, and Emergency Wipe.
 
