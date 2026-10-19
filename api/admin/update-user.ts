@@ -1,43 +1,20 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getAuth } from "firebase-admin/auth";
-import { adminApp, adminDb } from "../_lib/admin.js";
+import { adminDb } from "../_lib/admin.js";
+import { verifyAdminCaller } from "../_lib/auth.js";
 import { handleCors } from "../_lib/cors.js";
 
-const DEFAULT_ADMIN_EMAILS = ["kingenious0@gmail.com"];
-
-function getAuthorizedAdminEmails(): string[] {
-  const extra = (process.env.TRACKD_ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return Array.from(new Set([...DEFAULT_ADMIN_EMAILS, ...extra]));
-}
-
-async function verifyAdminCaller(req: VercelRequest): Promise<{ authorized: boolean; email?: string }> {
-  const authHeader = req.headers.authorization ?? "";
-  if (!authHeader.startsWith("Bearer ")) return { authorized: false };
-  const idToken = authHeader.substring(7).trim();
-  try {
-    const decoded = await getAuth(adminApp()).verifyIdToken(idToken);
-    const callerEmail = (decoded.email ?? "").toLowerCase();
-    const authorizedList = getAuthorizedAdminEmails();
-    return { authorized: authorizedList.includes(callerEmail), email: callerEmail };
-  } catch (err) {
-    return { authorized: false };
-  }
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (handleCors(req, res)) return;
+  try {
+    if (handleCors(req, res)) return;
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method not allowed" });
-  }
+    if (req.method !== "POST") {
+      return res.status(405).json({ success: false, error: "Method not allowed" });
+    }
 
-  const { authorized } = await verifyAdminCaller(req);
-  if (!authorized) {
-    return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
-  }
+    const { authorized } = await verifyAdminCaller(req);
+    if (!authorized) {
+      return res.status(403).json({ success: false, error: "Access denied. Administrator privileges required." });
+    }
 
   const { targetUserId, updates } = (req.body ?? {}) as {
     targetUserId?: string;

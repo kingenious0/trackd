@@ -10,23 +10,29 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function isSuperAdmin() {
+      return signedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'kingenious0@gmail.com';
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || isSuperAdmin();
+      allow list: if isSuperAdmin();
     }
 
     match /devices/{deviceId} {
       allow get: if true;
-      allow list: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow list: if (signedIn() && resource.data.userId == request.auth.uid) || isSuperAdmin();
+      allow create: if (signedIn() && request.resource.data.userId == request.auth.uid) || isSuperAdmin();
       allow update: if (signedIn() && resource.data.userId == request.auth.uid)
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'lastSeenAt', 'lastTelemetry', 'battery', 'requestLocate', 'requestSiren', 'stopSiren', 'requestWipe']);
-      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'lastSeenAt', 'lastTelemetry', 'battery', 'requestLocate', 'requestSiren', 'stopSiren', 'requestWipe'])
+        || isSuperAdmin();
+      allow delete: if (signedIn() && resource.data.userId == request.auth.uid) || isSuperAdmin();
     }
 
     match /telemetry_logs/{logId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow read, list: if (signedIn() && resource.data.userId == request.auth.uid) || isSuperAdmin();
+      allow create: if (signedIn() && request.resource.data.userId == request.auth.uid) || isSuperAdmin();
+      allow update, delete: if isSuperAdmin();
     }
 
     // OTP challenges are written by the /api backend (Admin SDK) only.

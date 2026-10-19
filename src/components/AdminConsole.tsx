@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import Navbar from "./Navbar";
 import { apiUrl } from "../lib/api";
+import { collection, doc, getDocs, limit, query, updateDoc } from "firebase/firestore";
+import { db } from "../lib/firebase";
 
 interface AdminStats {
   totalDevices: number;
@@ -90,6 +92,90 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
   const [editSaving, setEditSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string | null>(null);
 
+  const fetchDirectFromFirestore = async () => {
+    const dbInstance = db();
+    const [devicesSnap, usersSnap, logsSnap] = await Promise.all([
+      getDocs(query(collection(dbInstance, "devices"), limit(200))),
+      getDocs(query(collection(dbInstance, "users"), limit(200))),
+      getDocs(query(collection(dbInstance, "telemetry_logs"), limit(50))).catch(() => null)
+    ]);
+
+    const devList: AdminDevice[] = devicesSnap.docs.map((docSnap) => {
+      const d = docSnap.data();
+      return {
+        id: docSnap.id,
+        userId: d.userId ?? "",
+        deviceName: d.deviceName ?? "Unnamed Device",
+        deviceModel: d.deviceModel ?? "Android Handset",
+        fcmToken: Boolean(d.fcmToken),
+        registeredSimSerial: d.registeredSimSerial ?? "",
+        isStolen: Boolean(d.isStolen),
+        requestLocate: Boolean(d.requestLocate),
+        requestSiren: Boolean(d.requestSiren),
+        battery: d.battery ?? (d.lastTelemetry?.battery ?? null),
+        lastSeenAt: d.lastSeenAt
+          ? typeof d.lastSeenAt === "object" && "toDate" in d.lastSeenAt
+            ? (d.lastSeenAt as { toDate: () => Date }).toDate().toISOString()
+            : String(d.lastSeenAt)
+          : null,
+        lastTelemetry: d.lastTelemetry ?? null
+      };
+    });
+
+    const userList: AdminUser[] = usersSnap.docs.map((docSnap) => {
+      const u = docSnap.data();
+      return {
+        id: docSnap.id,
+        fullName: u.fullName ?? "Trackd User",
+        email: u.email ?? "",
+        phoneNumber: u.phoneNumber ?? "",
+        emergencyContactPhone: u.emergencyContactPhone ?? "",
+        createdAt: u.createdAt
+          ? typeof u.createdAt === "object" && "toDate" in u.createdAt
+            ? (u.createdAt as { toDate: () => Date }).toDate().toISOString()
+            : String(u.createdAt)
+          : null
+      };
+    });
+
+    const logList: AdminLog[] = logsSnap
+      ? logsSnap.docs.map((docSnap) => {
+          const l = docSnap.data();
+          return {
+            id: docSnap.id,
+            deviceId: l.deviceId ?? "",
+            userId: l.userId ?? "",
+            triggerReason: l.triggerReason ?? "UNKNOWN",
+            battery: l.battery ?? null,
+            timestamp: l.timestamp
+              ? typeof l.timestamp === "object" && "toDate" in l.timestamp
+                ? (l.timestamp as { toDate: () => Date }).toDate().toISOString()
+                : String(l.timestamp)
+              : null,
+            accuracy: l.accuracy ?? null
+          };
+        })
+      : [];
+
+    const now = Date.now();
+    const active24h = devList.filter((d) => {
+      if (!d.lastSeenAt) return false;
+      const seenTime = new Date(d.lastSeenAt).getTime();
+      return now - seenTime < 24 * 60 * 60 * 1000;
+    }).length;
+
+    setStats({
+      totalDevices: devList.length,
+      totalUsers: userList.length,
+      active24h,
+      stolenActive: devList.filter((d) => d.isStolen).length,
+      totalLogsCaptured: logList.length
+    });
+    setDevices(devList);
+    setUsers(userList);
+    setRecentLogs(logList);
+  };
+
   const fetchAdminData = async () => {
     setLoading(true);
     setError(null);
@@ -102,21 +188,26 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
         }
       });
       const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("application/json")) {
-        throw new Error(
-          `Server returned non-JSON response from ${endpoint} (HTTP ${res.status}). Ensure the production backend is deployed.`
-        );
+      if (res.ok && contentType.includes("application/json")) {
+        const data = await res.json();
+        if (data.success) {
+          setStats(data.stats);
+          setDevices(data.devices || []);
+          setUsers(data.users || []);
+          setRecentLogs(data.recentLogs || []);
+          return;
+        }
       }
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-      setStats(data.stats);
-      setDevices(data.devices || []);
-      setUsers(data.users || []);
-      setRecentLogs(data.recentLogs || []);
+      // If serverless endpoint returned an error or non-JSON, fallback directly to Firestore
+      console.warn("API returned non-200. Using direct Firestore query fallback...");
+      await fetchDirectFromFirestore();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load admin stats");
+      console.warn("API request failed, attempting direct Firestore query...", err);
+      try {
+        await fetchDirectFromFirestore();
+      } catch (fallbackErr) {
+        setError(fallbackErr instanceof Error ? fallbackErr.message : "Failed to load admin stats");
+      }
     } finally {
       setLoading(false);
     }
@@ -132,23 +223,38 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
     setEditSaving(true);
     setEditNotice(null);
     try {
-      const idToken = await user.getIdToken();
-      const res = await fetch(apiUrl("/api/admin/update-user"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-          targetUserId: editingUser.id,
-          updates: {
-            emergencyContactPhone: editEmergencyPhone,
-            fullName: editFullName
-          }
-        })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Update failed");
+      let updated = false;
+      try {
+        const idToken = await user.getIdToken();
+        const res = await fetch(apiUrl("/api/admin/update-user"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            targetUserId: editingUser.id,
+            updates: {
+              emergencyContactPhone: editEmergencyPhone,
+              fullName: editFullName
+            }
+          })
+        });
+        const contentType = res.headers.get("content-type") || "";
+        if (res.ok && contentType.includes("application/json")) {
+          const data = await res.json();
+          if (data.success) updated = true;
+        }
+      } catch {
+        // Fallback to direct Firestore below
+      }
+
+      if (!updated) {
+        await updateDoc(doc(db(), "users", editingUser.id), {
+          fullName: editFullName.trim(),
+          emergencyContactPhone: editEmergencyPhone.trim()
+        });
+      }
 
       setEditNotice("User profile updated successfully.");
       // Update local state
