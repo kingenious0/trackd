@@ -13,11 +13,13 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldCheck,
-  Zap
+  Zap,
+  Trash2,
+  CheckCircle2
 } from "lucide-react";
 import Navbar from "./Navbar";
 import { apiUrl } from "../lib/api";
-import { collection, doc, getDocs, limit, query, updateDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDocs, limit, query, updateDoc, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 
 interface AdminStats {
@@ -91,6 +93,18 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
   const [editFullName, setEditFullName] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editNotice, setEditNotice] = useState<string | null>(null);
+
+  // Deletion modal state
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: "device" | "user";
+    id: string;
+    name: string;
+    extra?: string;
+  } | null>(null);
+  const [deleteUserDevicesOption, setDeleteUserDevicesOption] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
 
   const fetchDirectFromFirestore = async () => {
     const dbInstance = db();
@@ -276,6 +290,94 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
     }
   };
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      let apiSucceeded = false;
+      try {
+        const idToken = await user.getIdToken();
+        const res = await fetch(apiUrl("/api/admin/delete-item"), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            type: deleteTarget.type,
+            id: deleteTarget.id,
+            deleteUserDevices: deleteUserDevicesOption
+          })
+        });
+        const contentType = res.headers.get("content-type") || "";
+        if (res.ok && contentType.includes("application/json")) {
+          const data = await res.json();
+          if (data.success) apiSucceeded = true;
+        }
+      } catch {
+        // Fallback to direct client Firestore deletion below
+      }
+
+      if (!apiSucceeded) {
+        if (deleteTarget.type === "device") {
+          await deleteDoc(doc(db(), "devices", deleteTarget.id));
+        } else {
+          await deleteDoc(doc(db(), "users", deleteTarget.id));
+          if (deleteUserDevicesOption) {
+            const devSnap = await getDocs(
+              query(collection(db(), "devices"), where("userId", "==", deleteTarget.id))
+            );
+            for (const d of devSnap.docs) {
+              await deleteDoc(doc(db(), "devices", d.id));
+            }
+          }
+        }
+      }
+
+      // Update local state immediately
+      if (deleteTarget.type === "device") {
+        setDevices((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+        setStats((prev) =>
+          prev
+            ? {
+                ...prev,
+                totalDevices: Math.max(0, prev.totalDevices - 1),
+                stolenActive:
+                  prev.stolenActive -
+                  (devices.find((d) => d.id === deleteTarget.id)?.isStolen ? 1 : 0)
+              }
+            : null
+        );
+        setSuccessBanner(`Device "${deleteTarget.name}" deleted permanently.`);
+      } else {
+        setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+        if (deleteUserDevicesOption) {
+          setDevices((prev) => prev.filter((d) => d.userId !== deleteTarget.id));
+        }
+        setStats((prev) =>
+          prev
+            ? {
+                ...prev,
+                totalUsers: Math.max(0, prev.totalUsers - 1),
+                totalDevices: deleteUserDevicesOption
+                  ? devices.filter((d) => d.userId !== deleteTarget.id).length
+                  : prev.totalDevices
+              }
+            : null
+        );
+        setSuccessBanner(`User "${deleteTarget.name}" deleted permanently.`);
+      }
+
+      setDeleteTarget(null);
+      setTimeout(() => setSuccessBanner(null), 4000);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete item");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const filteredDevices = devices.filter((d) => {
     const q = searchQuery.toLowerCase();
     return (
@@ -352,6 +454,13 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
               <strong className="font-semibold text-red-400">Access Restricted or Error</strong>
               <p className="mt-0.5">{error}</p>
             </div>
+          </div>
+        )}
+
+        {successBanner && (
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-xs text-emerald-200 flex items-center gap-3 shadow-lg">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <p className="font-semibold text-emerald-300">{successBanner}</p>
           </div>
         )}
 
@@ -460,17 +569,34 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                         <div className="font-mono text-[11px] text-slate-400">{dev.deviceModel}</div>
                         <div className="font-mono text-[10px] text-slate-500 truncate max-w-[200px]">{dev.id}</div>
                       </div>
-                      {dev.isStolen ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                          <Lock className="w-3 h-3" />
-                          STOLEN
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-                          <ShieldCheck className="w-3 h-3" />
-                          Safe
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {dev.isStolen ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                            <Lock className="w-3 h-3" />
+                            STOLEN
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                            <ShieldCheck className="w-3 h-3" />
+                            Safe
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              type: "device",
+                              id: dev.id,
+                              name: dev.deviceName,
+                              extra: dev.deviceModel
+                            })
+                          }
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                          title="Delete device"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-xs font-mono">
@@ -519,12 +645,13 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                       <th className="p-3.5">Last Coordinates</th>
                       <th className="p-3.5">Last Seen</th>
                       <th className="p-3.5">FCM Push</th>
+                      <th className="p-3.5 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-sans">
                     {filteredDevices.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-500">
+                        <td colSpan={7} className="p-8 text-center text-slate-500">
                           No devices matched your query.
                         </td>
                       </tr>
@@ -594,6 +721,24 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                               <span className="inline-block w-2 h-2 rounded-full bg-slate-600" title="No FCM Token" />
                             )}
                           </td>
+
+                          <td className="p-3.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  type: "device",
+                                  id: dev.id,
+                                  name: dev.deviceName,
+                                  extra: dev.deviceModel
+                                })
+                              }
+                              className="p-1.5 inline-flex items-center rounded-lg bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 transition"
+                              title="Delete device permanently"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       ))
                     )}
@@ -621,18 +766,35 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                         <div className="font-bold text-white text-sm">{u.fullName}</div>
                         <div className="font-mono text-xs text-slate-400">{u.email}</div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingUser(u);
-                          setEditEmergencyPhone(u.emergencyContactPhone || "");
-                          setEditFullName(u.fullName || "");
-                          setEditNotice(null);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-[#00F29D]/10 hover:bg-[#00F29D]/20 border border-[#00F29D]/30 text-[11px] font-semibold text-[#00F29D] transition"
-                      >
-                        Rescue
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingUser(u);
+                            setEditEmergencyPhone(u.emergencyContactPhone || "");
+                            setEditFullName(u.fullName || "");
+                            setEditNotice(null);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-[#00F29D]/10 hover:bg-[#00F29D]/20 border border-[#00F29D]/30 text-[11px] font-semibold text-[#00F29D] transition"
+                        >
+                          Rescue
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeleteTarget({
+                              type: "user",
+                              id: u.id,
+                              name: u.fullName,
+                              extra: u.email
+                            })
+                          }
+                          className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 transition"
+                          title="Delete user account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/5 text-xs font-mono">
@@ -683,7 +845,7 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                           <td className="p-3.5 text-slate-400 text-[11px] font-mono">
                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
                           </td>
-                          <td className="p-3.5 text-right">
+                          <td className="p-3.5 text-right space-x-1.5">
                             <button
                               type="button"
                               onClick={() => {
@@ -695,6 +857,21 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                               className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-semibold text-[#00F29D] transition"
                             >
                               Edit / Rescue
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  type: "user",
+                                  id: u.id,
+                                  name: u.fullName,
+                                  extra: u.email
+                                })
+                              }
+                              className="p-1.5 inline-flex items-center rounded-lg bg-white/5 hover:bg-rose-500/20 border border-white/10 hover:border-rose-500/30 text-slate-400 hover:text-rose-400 transition"
+                              title="Delete user account"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </td>
                         </tr>
@@ -852,6 +1029,82 @@ export default function AdminConsole({ user, onExitAdmin, onSwitchToDownload }: 
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteTarget && (
+          <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div className="w-full max-w-sm rounded-3xl bg-[#0D1322] border border-rose-500/30 p-6 space-y-4 shadow-2xl relative">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0 text-rose-400">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Delete {deleteTarget.type === "device" ? "Device" : "User Account"}?
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    This action is permanent and cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-[#070B14] border border-white/10 space-y-1 text-xs">
+                <div className="text-white font-bold">{deleteTarget.name}</div>
+                {deleteTarget.extra && (
+                  <div className="text-slate-400 font-mono text-[11px]">{deleteTarget.extra}</div>
+                )}
+                <div className="text-slate-500 font-mono text-[10px] break-all">{deleteTarget.id}</div>
+              </div>
+
+              {deleteTarget.type === "user" && (
+                <label className="flex items-center gap-2.5 p-2 rounded-xl bg-white/[0.03] border border-white/5 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={deleteUserDevicesOption}
+                    onChange={(e) => setDeleteUserDevicesOption(e.target.checked)}
+                    className="rounded border-white/20 text-rose-500 focus:ring-rose-500 bg-[#070B14]"
+                  />
+                  <span>Also delete registered devices owned by this user</span>
+                </label>
+              )}
+
+              {deleteError && (
+                <p className="text-xs p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300">
+                  {deleteError}
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteError(null);
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-slate-300 font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={confirmDelete}
+                  className="flex-1 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {isDeleting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting…</span>
+                    </>
+                  ) : (
+                    <span>Permanently Delete</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         )}
